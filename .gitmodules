@@ -1,0 +1,6 @@
+[submodule "libsais"]
+	path = libsais
+	url = https://github.com/IlyaGrebnov/libsais
+[submodule "googletest"]
+	path = googletest
+	url = https://github.com/google/googletest.git
