@@ -9,7 +9,6 @@ Most notably, FL-RMQ gives robust theoretical guarantees and offers novel space-
 ```bash
 git clone https://github.com/FilippoLari/FL-RMQ
 cd FL-RMQ
-git submodule update --remote --recursive
 mkdir build
 cd build
 cmake ..
