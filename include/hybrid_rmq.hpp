@@ -19,7 +19,7 @@
 
 template<typename K, typename Range, typename Pos,
  typename Floating = float, size_t Threshold = 10000, size_t Epsilon = 64>
-class hybrid_rmq {
+class HBRMQ {
     static_assert(std::is_integral_v<K>);
     static_assert(std::is_integral_v<Range>);
     static_assert(std::is_integral_v<Pos>);
@@ -45,9 +45,9 @@ class hybrid_rmq {
 
 public:
 
-    hybrid_rmq() = default;
+    HBRMQ() = default;
 
-    explicit hybrid_rmq(const std::vector<K> &data) : data(data), n(data.size()) {
+    explicit HBRMQ(const std::vector<K> &data) : data(data), n(data.size()) {
         if(n == 0) [[unlikely]]
             return;
 
@@ -287,7 +287,7 @@ private:
 
 template<typename K, typename Range, typename Pos,
  typename Floating, size_t Threshold, size_t Epsilon>
-struct hybrid_rmq<K, Range, Pos, Floating, Threshold, Epsilon>::Segment {
+struct HBRMQ<K, Range, Pos, Floating, Threshold, Epsilon>::Segment {
     Range range;
     Floating slope;
     Pos intercept;

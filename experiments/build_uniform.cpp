@@ -45,7 +45,7 @@ int main(void) {
 
         FLRMQ<int, int64_t, int64_t, float, eps> fl_rmq(data);
         block_decomposition_hb<int, int64_t> block_dec(data, static_cast<size_t>(ceil(pow(size, 0.33))));
-        hybrid_rmq<int, int64_t, int64_t, float, threshold, eps> hb_rmq(data);
+        HBRMQ<int, int64_t, int64_t, float, threshold, eps> hb_rmq(data);
 
         std::cout << "number of segments: " << fl_rmq.segment_count() << std::endl;
         
