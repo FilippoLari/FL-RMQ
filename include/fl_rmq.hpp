@@ -17,7 +17,7 @@
 #define SUB_DELTA(x, delta) ((x) <= delta ? 0 : ((x) - (delta)))
 
 template<typename K, typename Range, typename Pos,
- typename Floating = float, size_t Epsilon = 64>
+ typename Floating = float, size_t Epsilon = 64, bool Rightmost = true>
 class FLRMQ {
     static_assert(std::is_integral_v<K>);
     static_assert(std::is_integral_v<Range>);
@@ -25,18 +25,16 @@ class FLRMQ {
     static_assert(std::is_floating_point_v<Floating>);
     static_assert(Epsilon > 0);
 
+protected:
+
     using pla_model = OptimalPiecewiseLinearModel<Range, Pos>;
 
     struct Segment;
-
-    static constexpr Range sentinel = std::numeric_limits<Range>::has_infinity ? std::numeric_limits<Range>::infinity()
-                                                                       : std::numeric_limits<Range>::max();
 
     std::vector<Segment> segments;
 
     std::vector<int64_t> first_segment; // todo: use the correct type
     std::vector<int64_t> deltas; // todo: use the correct type, each delta is at most nlog(n)
-    std::vector<K> data;
 
     size_t ranges;
     size_t n;
@@ -45,7 +43,7 @@ public:
 
     FLRMQ() = default;
 
-    explicit FLRMQ(const std::vector<K> &data) : data(data), n(data.size()) {
+    explicit FLRMQ(const std::vector<K> &data) : n(data.size()) {
         if(n == 0) [[unlikely]]
             return;
 
@@ -56,18 +54,12 @@ public:
 
         segments.reserve(n/Epsilon);
 
-        int64_t d = 0, curr = 1, prev = 0, last = n - 1, r = 0;
+        int64_t d = 0, curr = 1, prev = 0, last = n - 1, r = n;
         const auto max_p = msb(n);
 
         // fill the first column
         for(auto i = 0; i < n; ++i)
             st[prev][i] = i;
-
-        // todo: remove it, at query time i!=j
-        for(auto i = 0; i < n; ++i) {
-            insert_point(r, i, pla);
-            ++r;
-        }
         
         deltas.reserve(max_p);
         deltas.push_back(d);
@@ -76,8 +68,11 @@ public:
             // rmq(i, i+(1<<j)-1) = min{rmq(i,i+(1<<(j-1))-1), rmq(i+(1<<(j-1)), i+(1<<j)-1)}
             for(auto i = 0; i + (1 << j) <= n; ++i) {
             
-                st[curr][i] = (data[st[prev][i]]<data[st[prev][i+(1<<(j-1))]])? st[prev][i] : st[prev][i+(1<<(j-1))];
-            
+                if constexpr (Rightmost)
+                    st[curr][i] = (data[st[prev][i]]<data[st[prev][i+(1<<(j-1))]])? st[prev][i] : st[prev][i+(1<<(j-1))];
+                else
+                    st[curr][i] = (data[st[prev][i]]<=data[st[prev][i+(1<<(j-1))]])? st[prev][i] : st[prev][i+(1<<(j-1))];
+
                 // it is true O(log(n)) times
                 if(i == 0 && last > st[curr][0]) [[unlikely]] {
                     d += (last - st[curr][0] + 1);
@@ -97,9 +92,6 @@ public:
 
         // add the last segment
         segments.emplace_back(pla.get_segment());
-
-        // add the sentinel
-        segments.emplace_back(sentinel, 0, r);
 
         ranges = r - n;
 
@@ -122,12 +114,12 @@ public:
      * @param j the right extreme of the interval
      * @return the position of the minimum inside [i,j] 
      */
-    size_t query(size_t i, size_t j) const {
+    size_t query(const std::vector<K> &data, const size_t i, const size_t j) const {
 
         const auto len = j - i + 1;
 
         if(len <= 2 * Epsilon + 1) { // todo: check this condition
-            return find_minimum(i, j).second;
+            return find_minimum(data, i, j).second;
         }
 
         const auto k = msb(len);
@@ -144,8 +136,8 @@ public:
         auto [lo1, hi1] = reduce_interval(it_s1, e1, deltas[k], i, i + (1 << k) - 1);
         auto [lo2, hi2] = reduce_interval(it_s2, e2, deltas[k], j - (1 << k) + 1, j);
 
-        auto [m1, p1] = find_minimum(lo1, hi1);
-        auto [m2, p2] = find_minimum(lo2, hi2);
+        auto [m1, p1] = find_minimum(data, lo1, hi1);
+        auto [m2, p2] = find_minimum(data, lo2, hi2);
 
         return (m1 < m2)? p1 : p2;
     }
@@ -181,7 +173,7 @@ public:
                     + sizeof(size_t) ) * CHAR_BIT;
     }
 
-private:
+protected:
 
     /**
      * Returns the largest k such that 2^k <= len,
@@ -193,21 +185,6 @@ private:
     inline uint msb(const size_t len) const { // todo: use sdsl
         const auto leading_zeroes = __builtin_clzll(len);
         return 63-leading_zeroes;
-    }
-
-    /**
-     * Performs the insertion of a new point inside the PLA,
-     * creating a new segment if necessary.
-     * 
-     * @param x the encoding of a range
-     * @param y the adjusted position of a minima
-     * @param pla the piecewise-linear approximation model
-     */
-    inline void insert_point(const Range x, const Pos y, pla_model &pla) {
-        if(!pla.add_point(x, y)) {
-            segments.emplace_back(pla.get_segment());
-            pla.add_point(x, y);
-        }
     }
 
     /**
@@ -257,6 +234,23 @@ private:
         return std::make_pair(reduced_lo, reduced_hi);
     }
 
+private:
+
+    /**
+     * Performs the insertion of a new point inside the PLA,
+     * creating a new segment if necessary.
+     * 
+     * @param x the encoding of a range
+     * @param y the adjusted position of a minima
+     * @param pla the piecewise-linear approximation model
+     */
+    inline void insert_point(const Range x, const Pos y, pla_model &pla) {
+        if(!pla.add_point(x, y)) {
+            segments.emplace_back(pla.get_segment());
+            pla.add_point(x, y);
+        }
+    }
+
     /**
      * Search for the minimum and its position inside an interval.
      * 
@@ -264,7 +258,7 @@ private:
      * @param hi the right extreme of the interval
      * @return a pair consisting of the minimum and its position inside [lo,hi]
      */
-    inline std::pair<K, size_t> find_minimum(const size_t lo, const size_t hi) const {
+    inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_t lo, const size_t hi) const {
         K min = data[lo];
         size_t idx = lo;
 
@@ -279,8 +273,8 @@ private:
 };
 
 template<typename K, typename Range, typename Pos,
- typename Floating, size_t Epsilon>
-struct FLRMQ<K, Range, Pos, Floating, Epsilon>::Segment {
+ typename Floating, size_t Epsilon, bool Rightmost>
+struct FLRMQ<K, Range, Pos, Floating, Epsilon, Rightmost>::Segment {
     Range range;
     Floating slope;
     Pos intercept;
