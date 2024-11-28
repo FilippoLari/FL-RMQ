@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
-project(fl_rmq)
+project(FL-RMQ)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -g -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O3")
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -11,10 +11,32 @@ if (COMPILER_SUPPORTS_MARCH_NATIVE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 endif ()
 
-include_directories(include)
-
 add_library(fl_rmq_lib INTERFACE)
-target_include_directories(fl_rmq_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+target_include_directories(fl_rmq_lib INTERFACE include sdsl-lite/include)
+
+target_include_directories(fl_rmq_lib INTERFACE include libsais)
+
+target_include_directories(fl_rmq_lib INTERFACE include bit_vector/include)
+
+target_include_directories(fl_rmq_lib INTERFACE include bit_vector/_deps/pasta_utils-src/include)
+
+target_include_directories(fl_rmq_lib INTERFACE include bit_vector/_deps/tlx-src)
+
+
+#include_directories(include)
+
+#add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bit_vector)
+
+#add_library(pasta_bv INTERFACE)
+#target_include_directories(pasta_bv INTERFACE bit_vector/include)
+#target_include_directories(pasta_bv INTERFACE bit_vector/_deps/tlx-src)
+
+#add_library(sdsl INTERFACE)
+#target_include_directories(sdsl INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/sdsl-lite/include)
+
+#add_library(fl_rmq_lib INTERFACE)
+#target_include_directories(fl_rmq_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include sdsl)
 
 # add libsais
 set(LIBSAIS_DIR ${CMAKE_SOURCE_DIR}/libsais)
