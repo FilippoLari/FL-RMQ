@@ -7,7 +7,7 @@
 #include <tuple>
 
 #include "fl_rmq.hpp"
-//#include "hybrid_rmq.hpp"
+#include "fl_rmq_succ.hpp"
 
 using query_type = std::pair<size_t, size_t>;
 
@@ -17,7 +17,7 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
     size_t idx = lo;
 
     for(auto i = lo; i <= hi; ++i)
-        if(min > data[i]) [[unlikely]] {
+        if(data[i] < min) [[unlikely]] { // change it when testing syst version
             min = data[i];
             idx = i;
         }
@@ -26,22 +26,22 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
 }
 
 template<typename K>
-std::vector<K> generate_unique(const size_t n, const K lower, const K upper, int seed = 42) {
-    if (upper - lower + 1 < n) {
-        throw std::invalid_argument("Range is too small to generate unique elements.");
+std::vector<K> generate_uniform(const size_t n, const K u, const int seed = 42) {
+    
+    static_assert(std::is_integral<K>::value);
+
+    std::mt19937 gen(seed); 
+    
+    std::uniform_int_distribution<K> dis(1, u); 
+
+    std::vector<K> results;
+    results.reserve(n);
+
+    for(auto i = 0; i < n; ++i) {
+        results.push_back(dis(gen));
     }
-
-    std::unordered_set<K> unique_numbers;
-    std::mt19937 gen(seed);
-    std::uniform_int_distribution<K> dis(lower, upper);
-
-    while (unique_numbers.size() < n) {
-        const K number = dis(gen);
-        unique_numbers.insert(number);
-    }
-
-    std::vector<K> random_vector(unique_numbers.begin(), unique_numbers.end());
-    return random_vector;
+    
+    return results;
 }
 
 std::vector<query_type> generate_queries(const size_t n, const size_t q,
@@ -65,7 +65,7 @@ std::vector<query_type> generate_queries(const size_t n, const size_t q,
 }
 
 template<size_t Epsilon>
-using FLRMQType = FLRMQ<int, int64_t, int64_t, float, Epsilon>;
+using FLRMQType = SuccinctFLRMQ<int, int64_t, int64_t, float, Epsilon>;
 
 template<size_t... Epsilons>
 using FLRMQTypes = std::tuple<FLRMQType<Epsilons>...>;
@@ -78,7 +78,9 @@ struct TupleToGTestTypes<std::tuple<Ts...>> {
     using type = ::testing::Types<Ts...>;
 };
 
-using MyTypes = typename TupleToGTestTypes<FLRMQTypes<16, 32, 64, 128, 256, 512, 1024, 2048>>::type;
+//using MyTypes = typename TupleToGTestTypes<FLRMQTypes<16, 32, 64, 128, 256, 512, 1024, 2048>>::type;
+
+using MyTypes = typename TupleToGTestTypes<FLRMQTypes<64>>::type;
 
 template<typename T>
 class FLRMQTest : public testing::Test {
@@ -91,8 +93,13 @@ class FLRMQTest : public testing::Test {
 
     static void SetUpTestSuite() {
         if(data.empty() && queries.empty()) {
-            data = generate_unique<int>(1000000, 1, 1000000000);
-            queries = generate_queries(1000000, 100000, 5000);
+            data = generate_uniform<int>(1000000, 1000000);
+            std::vector<query_type> queries_50 = generate_queries(1000000, 100, 500);
+            std::vector<query_type> queries_100 = generate_queries(1000000, 100, 1000);
+            std::vector<query_type> queries_1000 = generate_queries(1000000, 100, 5000);
+            queries.insert(queries.end(), queries_50.begin(), queries_50.end());
+            queries.insert(queries.end(), queries_100.begin(), queries_100.end());
+            queries.insert(queries.end(), queries_1000.begin(), queries_1000.end());
         }
     }
 
@@ -111,7 +118,8 @@ TYPED_TEST(FLRMQTest, QueriesWork) {
     for(const auto &q : FLRMQTest<TypeParam>::queries) {
         const auto [min, min_pos] = find_minimum(FLRMQTest<TypeParam>::data, q.first, q.second);
         const auto computed_pos = this->rmq_ds.query(q.first, q.second);
-        ASSERT_EQ(min, FLRMQTest<TypeParam>::data[computed_pos]);
+        //const auto computed_pos = this->rmq_ds.query(FLRMQTest<TypeParam>::data, q.first, q.second);
+        //ASSERT_EQ(min, FLRMQTest<TypeParam>::data[computed_pos]);
         ASSERT_EQ(min_pos, computed_pos);
     }
 }

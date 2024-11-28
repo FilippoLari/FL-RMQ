@@ -115,10 +115,19 @@ public:
 
         if(reversed) std::swap(m_i, m_j);
 
+        //std::cout << "select_i: " << m_i + 2 << " select_j: " << m_j + 2 << std::endl;
+
         const size_t bp_i = bp_rs.select1(m_i + 2) - 1;
         const size_t bp_j = bp_rs.select1(m_j + 2);
 
+        //std::cout << "bp range: " << bp_i << " " << bp_j << std::endl;
+
         const auto [lo1, hi1, lo2, hi2] = excess_array_rmq.query(bp_i, bp_j);
+
+        /*std::cout << "first range:" << std::endl;
+        std::cout << lo1 << " " << hi1 << " len: " << hi1-lo1+1 << std::endl;
+        std::cout << "second range:" << std::endl;
+        std::cout << lo2 << " " << hi2 << " len: " << hi2-lo2+1 << std::endl;*/
 
         // naive linear scans
 
@@ -129,25 +138,59 @@ public:
 
         // rightmost +-1 rmq
 
+        //std::cout << "excess first range:" << std::endl;
+
         for(auto i = lo1; i <= hi1; ++i) {
             if(bp[i]) ++excess1;
             else --excess1;
+            //std::cout << excess1 << " ";
             min_excess1 = (excess1 <= min_excess1) ? excess1 : min_excess1;
-        }
+            excess1_pos = (excess1 <= min_excess1) ? i : excess1_pos;
+        } //std::cout << std::endl;
+
+        //std::cout << "excess second range:" << std::endl;
 
         for(auto i = lo2; i <= hi2; ++i) {
             if(bp[i]) ++excess2;
             else --excess2;
+            //std::cout << excess2 << " ";
             min_excess2 = (excess2 <= min_excess2) ? excess2 : min_excess2;
-        }
+            excess2_pos = (excess2 <= min_excess2) ? i : excess2_pos;
+        } //std::cout << std::endl;
 
-        auto array_pos = ((min_excess1 < min_excess2) ? bp_rs.rank1(excess1_pos) : bp_rs.rank1(excess2_pos)) - 1;
+        int64_t e_i = (i > 0) ? 2 * bp_rs.rank1(i - 1) - i + 1 : 0;
+        int64_t e_m1 = 2 * bp_rs.rank1(excess1_pos) - excess1_pos;
+        int64_t e_m2 = 2 * bp_rs.rank1(excess2_pos) - excess2_pos;
+
+        /*std::cout << "min pos first range: " << excess1_pos << " rel: " << min_excess1 << " abs: " << e_m1 << std::endl;
+        std::cout << "min pos second range: " << excess2_pos << " rel: " << min_excess2 << " abs: " << e_m2 << std::endl;*/
+
+        auto array_pos = ((e_m1 < e_m2) ? bp_rs.rank1(excess1_pos + 1) : bp_rs.rank1(excess2_pos + 1)) - 1;
+
+        /*int64_t min_excess = std::numeric_limits<int64_t>::max();
+        int64_t excess_pos = bp_i;
+        int64_t excess = 0;
+
+        std::cout << "whole excess array: " << std::endl;
+
+        for(auto i = bp_i; i <= bp_j; ++i) {
+            if(bp[i]) ++excess;
+            else --excess;
+            std::cout << "i: " << i << ", bp[i]: " << bp[i]
+              << ", excess: " << excess
+              << ", min_excess: " << min_excess
+              << ", excess_pos: " << excess_pos << std::endl;
+            min_excess = (excess <= min_excess) ? excess : min_excess;
+            excess_pos = (excess <= min_excess) ? i : excess_pos;
+        }std::cout << std::endl;
+
+        std::cout << "real min pos: " << excess_pos << std::endl;*/
 
         return (reversed) ? mirror(array_pos) : array_pos;
     }
 
     inline size_t size() const {
-        std::cout << "pm RMQ: " << excess_array_rmq.size() << " bp: " << bp.size() << " rs_bp: " << bp_rs.space_usage() * CHAR_BIT << std::endl;
+        //std::cout << "pm RMQ: " << excess_array_rmq.size() << " bp: " << bp.size() << " rs_bp: " << bp_rs.space_usage() * CHAR_BIT << std::endl;
         return excess_array_rmq.size() 
                 + (bp_rs.space_usage() * CHAR_BIT) 
                 + bp.size() + sizeof(size_t) + sizeof(bool);

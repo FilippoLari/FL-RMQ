@@ -130,10 +130,8 @@ public:
     }
 
     bool add_point(const X &x, const Y &y) {
-        if (points_in_hull > 0 && x <= last_x) {
-            std::cout << x << " " << last_x << std::endl;
+        if (points_in_hull > 0 && x <= last_x)
             throw std::logic_error("Points must be increasing by x.");
-        }
 
         last_x = x;
         Point p1{x, SY(y) + epsilon};
