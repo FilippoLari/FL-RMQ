@@ -5,6 +5,8 @@
 #include <limits>
 #include <utility>
 
+#include <pasta/bit_vector/bit_vector.hpp>
+
 constexpr int8_t exc_byte[] = {
     -8,-6,-6,-4,-6,-4,-4,-2,-6,-4,-4,-2,-4,-2,-2,0,
     -6,-4,-4,-2,-4,-2,-2,0,-4,-2,-2,0,-2,0,0,2,
@@ -62,27 +64,66 @@ constexpr int8_t pos_min_exc_byte[] = {
     3,3,3,3,3,3,0,0,2,2,2,2,1,1,0,0,
 };
 
-/**
- * Given a 64-bit word return the byte containing the minimum
- * excess and the cumulative excess value of the word.
- */
-inline std::pair<size_t, int64_t> min_excess_word(uint64_t w) {
-
-    int64_t curr_min = std::numeric_limits<int64_t>::max();
-    int64_t curr_excess = 0;
+inline void min_excess_word(const uint64_t word, int64_t &exc, const size_t word_start,
+                                                     int64_t &min_exc, size_t &min_exc_idx) {
+    int64_t min_byte_exc = std::numeric_limits<int64_t>::max();
     size_t min_byte_idx = 0;
 
     for(size_t i = 0; i < 8; ++i) {
-        size_t shift = i * 8;
-        size_t byte = (w >> shift) & 0xFF;
+        const size_t shift = i * 8;
+        const size_t byte = (word >> shift) & 0xFF;
 
-        int64_t min_exc = curr_excess + min_exc_byte[byte];
+        const int64_t curr_min = exc + min_exc_byte[byte];
 
-        curr_min = (min_exc <= curr_min) ? min_exc : curr_min;
-        min_byte_idx = (min_exc <= curr_min) ? i : min_byte_idx;
+        min_byte_exc = (curr_min <= min_byte_exc) ? curr_min : min_byte_exc;
+        min_byte_idx = (curr_min <= min_byte_exc) ? i : min_byte_idx;
 
-        curr_excess += exc_byte[byte];
+        exc += exc_byte[byte];
     }
 
-    return std::make_pair(min_byte_idx, curr_excess);
+    if(min_byte_exc <= min_exc) {
+        min_exc = min_byte_exc;
+        const size_t shift = min_byte_idx * 8;
+        min_exc_idx = word_start + shift + pos_min_exc_byte[(word >> shift) & 0xFF];
+    }
+}
+
+inline std::pair<size_t, int64_t> min_excess(const pasta::BitVector &bv, int64_t exc_i,
+                                                 const size_t i, const size_t j) {
+    if (i == j) [[unlikely]] {
+        const int64_t excess = bv[i] ? 1 : -1;
+        return std::make_pair(i, excess);
+    }
+
+    const size_t w_i = i / 64;
+    const size_t w_j = j / 64;
+
+    int64_t min_exc = std::numeric_limits<int64_t>::max();
+    int64_t curr_exc = exc_i;
+    size_t min_exc_idx = i;
+
+    const size_t shift_len_i = (i % 64);
+    const size_t range_len = std::min<size_t>(j - i + 1, 64 - shift_len_i);
+    const size_t shifted_w_i = bv.data(w_i) >> shift_len_i;
+    const size_t padded_w_i = (range_len == 64) ? shifted_w_i : shifted_w_i | (~0ULL << range_len);
+
+    min_excess_word(padded_w_i, curr_exc, i, min_exc, min_exc_idx);
+
+    // todo: [[likely]] or [[unlikely]], check how often does it happen
+    if (w_i == w_j) {
+        return std::make_pair(min_exc_idx, min_exc);
+    }
+
+    curr_exc -= shift_len_i;
+
+    for(size_t w = w_i + 1; w < w_j; ++w) {
+        min_excess_word(bv.data(w), curr_exc, w * 64, min_exc, min_exc_idx);
+    }
+
+    const size_t shift_len_j = (j % 64) + 1; // includes j
+    const size_t padded_w_j = (shift_len_j == 64) ? bv.data(w_j) : bv.data(w_j) | (~0ULL << shift_len_j); 
+
+    min_excess_word(padded_w_j, curr_exc, w_j * 64, min_exc, min_exc_idx);
+
+    return std::make_pair(min_exc_idx, min_exc);
 }

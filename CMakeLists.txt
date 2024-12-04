@@ -52,4 +52,3 @@ add_subdirectory(tests)
 add_subdirectory(experiments)
 
 add_subdirectory(googletest)
-#enable_testing()
