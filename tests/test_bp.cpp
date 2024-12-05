@@ -28,30 +28,26 @@ std::pair<size_t, int64_t> min_excess_scan(const pasta::BitVector &bitvector,
 class BitVectorTest : public ::testing::Test {
 protected:
 
-    pasta::BitVector bitvector;
+    static pasta::BitVector bitvector;
 
-    std::vector<query_type> queries;
+    static std::vector<query_type> queries;
 
     static constexpr int seed = 42;
 
-    pasta::BitVector generate_bitvector(size_t size) {
+    static void init_bitvector(size_t size) {
         std::mt19937 gen(seed);
         std::uniform_int_distribution<int> dis(0, 1);
 
-        pasta::BitVector bv(size, 0);
+        bitvector = pasta::BitVector(size, 0);
 
         for (size_t i = 0; i < size; ++i) {
-            bv[i] = dis(gen);
+            bitvector[i] = dis(gen);
         }
-
-        return bv;
     }
 
-    std::vector<query_type> generate_queries(size_t num_queries, size_t size) {
-    
+    static void init_queries(size_t num_queries, size_t size) {
         const std::vector<size_t> lenghts = {128, 256, 512, 1024,
                                                 2048, 4096, 8192, 16384};
-        std::vector<query_type> queries;
         queries.reserve(num_queries * lenghts.size());
         std::mt19937 gen(seed);
 
@@ -64,16 +60,19 @@ protected:
                 queries.emplace_back(start, end);
             }
         }
-
-        return queries;
     }
 
-    void SetUp() override {
-        size_t size = (1 << 20);
-        bitvector = generate_bitvector(size);
-        queries = generate_queries(100, size);
+    static void SetUpTestSuite() {
+        if(queries.empty()) {
+            size_t size = (1 << 20);
+            init_bitvector(size);
+            init_queries(100, size);   
+        }
     }
 };
+
+pasta::BitVector BitVectorTest::bitvector;
+std::vector<query_type> BitVectorTest::queries;
 
 TEST_F(BitVectorTest, SameWordQueries) {
     for(size_t i = 0; i < 64; ++i) {

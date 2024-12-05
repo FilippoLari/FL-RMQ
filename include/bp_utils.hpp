@@ -7,6 +7,10 @@
 
 #include <pasta/bit_vector/bit_vector.hpp>
 
+/**
+ * Static precomputed table that gives the cumulative excess
+ * of any block of 8 bits.
+ */
 constexpr int8_t exc_byte[] = {
     -8,-6,-6,-4,-6,-4,-4,-2,-6,-4,-4,-2,-4,-2,-2,0,
     -6,-4,-4,-2,-4,-2,-2,0,-4,-2,-2,0,-2,0,0,2,
@@ -26,6 +30,10 @@ constexpr int8_t exc_byte[] = {
     0,2,2,4,2,4,4,6,2,4,4,6,4,6,6,8,
 };
 
+/**
+ * Static precomputed table that gives the minimum excess
+ * of any block of 8 bits.
+ */
 constexpr int8_t min_exc_byte[] = {
     -8,-6,-6,-4,-6,-4,-4,-2,-6,-4,-4,-2,-4,-2,-2,0,
     -6,-4,-4,-2,-4,-2,-2,0,-4,-2,-2,0,-2,0,-1,1,
@@ -45,6 +53,10 @@ constexpr int8_t min_exc_byte[] = {
     -4,-2,-2,0,-2,0,-1,1,-3,-1,-1,1,-2,0,-1,1,
 };
 
+/**
+ * Static precomputed table that gives the position of the rightmost minimum excess
+ * of any block of 8 bits.
+ */
 constexpr int8_t pos_min_exc_byte[] = {
     7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
     7,7,7,7,7,7,7,7,7,7,7,7,7,7,0,0,
@@ -64,6 +76,18 @@ constexpr int8_t pos_min_exc_byte[] = {
     3,3,3,3,3,3,0,0,2,2,2,2,1,1,0,0,
 };
 
+/**
+ * Computes the rightmost minimum excess and its position inside a 64-bit word.
+ * Notice how exc, min_exc, and min_exc_idx are modified.
+ * 
+ * Credits: https://github.com/ot/succinct/blob/master/bp_vector.cpp
+ * 
+ * @param word the 64-bit word
+ * @param exc the excess before word
+ * @param word_start the starting index of the word inside the bit vector
+ * @param min_exc the current minimum excess
+ * @param min_exc_idx the current minimum excess position
+ */
 inline void min_excess_word(const uint64_t word, int64_t &exc, const size_t word_start,
                                                      int64_t &min_exc, size_t &min_exc_idx) {
     int64_t min_byte_exc = std::numeric_limits<int64_t>::max();
@@ -88,6 +112,18 @@ inline void min_excess_word(const uint64_t word, int64_t &exc, const size_t word
     }
 }
 
+/**
+ * Computes the rightmost minimum excess and its position inside a given range [i,j].
+ * 
+ * Credits: https://github.com/ot/succinct/blob/master/bp_vector.cpp
+ * 
+ * @param bv the bit vector
+ * @param exc_i the excess of [0,i)
+ * @param i the left extreme of the range
+ * @param j the right extreme of the range
+ * @return a pair consisting of the position of the rightmost minimum excess
+ *          and its value 
+ */
 inline std::pair<size_t, int64_t> min_excess(const pasta::BitVector &bv, int64_t exc_i,
                                                  const size_t i, const size_t j) {
     if (i == j) [[unlikely]] {
