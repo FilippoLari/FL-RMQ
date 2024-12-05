@@ -13,6 +13,7 @@
 #include <pasta/bit_vector/support/find_l2_flat_with.hpp>
 #include <pasta/bit_vector/support/flat_rank_select.hpp>
 
+#include "bp_utils.hpp"
 #include "fl_rmq.hpp"
 
 template<typename K, typename Range, typename Pos,
@@ -65,7 +66,9 @@ public:
 
     explicit SuccinctFLRMQ(const std::vector<K> &data) : n(data.size()) {
 
-        bp = pasta::BitVector(2 * n + 2);
+        const size_t bp_size = 2 * n + 2;
+
+        bp = pasta::BitVector(bp_size, 0);
 
         if(build_cartesian_tree<true>(data) < build_cartesian_tree<false>(data)) {
             build_cartesian_tree<true>(data, true);
@@ -79,29 +82,13 @@ public:
         // todo: build it while computing the cartesian tree
 
         std::vector<int64_t> excess_array;
-        excess_array.reserve(2 * n + 2);
+        excess_array.reserve(bp_size);
         int64_t excess = 0;
 
-        for(auto i = 0; i < 2 * n + 2; ++i) {
-            if(bp[i]) excess++;
-            else excess--;
+        for(auto i = 0; i < bp_size; ++i) {
+            excess += bp[i] ? 1 : -1;
             excess_array.push_back(excess);
         }
-
-        /*int64_t max = 0;
-        for(auto &e : excess_array)
-            if(e > max) max = e;*/
-
-        //std::cout << "max excess: " << max << std::endl;
-
-        /*for(auto i = 0; i < 2 * n + 2; ++i)
-            if(bp[i]) std::cout << "(";
-            else std::cout << ")";
-        std::cout << std::endl;
-
-        for(auto &e : excess_array)
-            std::cout << e << " ";
-        std::cout << std::endl;*/
 
         excess_array_rmq = ExcessFLRMQ<int64_t, Range, Pos, Floating, Epsilon>(excess_array);
 
@@ -115,82 +102,28 @@ public:
 
         if(reversed) std::swap(m_i, m_j);
 
-        //std::cout << "select_i: " << m_i + 2 << " select_j: " << m_j + 2 << std::endl;
-
         const size_t bp_i = bp_rs.select1(m_i + 2) - 1;
         const size_t bp_j = bp_rs.select1(m_j + 2);
 
-        //std::cout << "bp range: " << bp_i << " " << bp_j << std::endl;
+        const auto [l1, h1, l2, h2] = excess_array_rmq.query(bp_i, bp_j);
 
-        const auto [lo1, hi1, lo2, hi2] = excess_array_rmq.query(bp_i, bp_j);
+        // rightmost +-1 rmq using precomputed tables
 
-        /*std::cout << "first range:" << std::endl;
-        std::cout << lo1 << " " << hi1 << " len: " << hi1-lo1+1 << std::endl;
-        std::cout << "second range:" << std::endl;
-        std::cout << lo2 << " " << hi2 << " len: " << hi2-lo2+1 << std::endl;*/
+        int64_t exc_l1 = 2 * bp_rs.rank1(l1) - (l1 + 1);
+        int64_t exc_l2 = 2 * bp_rs.rank1(l2) - (l2 + 1);
 
-        // naive linear scans
+        const auto [pos_min_exc1, min_exc1] = min_excess(bp, exc_l1, l1, h1);
+        const auto [pos_min_exc2, min_exc2] = min_excess(bp, exc_l2, l2, h2);
 
-        int64_t min_excess1 = std::numeric_limits<int64_t>::max();
-        int64_t min_excess2 = std::numeric_limits<int64_t>::max(); 
-        int64_t excess1_pos = lo1, excess2_pos = lo2;
-        int64_t excess1 = 0, excess2 = 0;
-
-        // rightmost +-1 rmq
-
-        //std::cout << "excess first range:" << std::endl;
-
-        for(auto i = lo1; i <= hi1; ++i) {
-            if(bp[i]) ++excess1;
-            else --excess1;
-            //std::cout << excess1 << " ";
-            min_excess1 = (excess1 <= min_excess1) ? excess1 : min_excess1;
-            excess1_pos = (excess1 <= min_excess1) ? i : excess1_pos;
-        } //std::cout << std::endl;
-
-        //std::cout << "excess second range:" << std::endl;
-
-        for(auto i = lo2; i <= hi2; ++i) {
-            if(bp[i]) ++excess2;
-            else --excess2;
-            //std::cout << excess2 << " ";
-            min_excess2 = (excess2 <= min_excess2) ? excess2 : min_excess2;
-            excess2_pos = (excess2 <= min_excess2) ? i : excess2_pos;
-        } //std::cout << std::endl;
-
-        int64_t e_i = (i > 0) ? 2 * bp_rs.rank1(i - 1) - i + 1 : 0;
-        int64_t e_m1 = 2 * bp_rs.rank1(excess1_pos) - excess1_pos;
-        int64_t e_m2 = 2 * bp_rs.rank1(excess2_pos) - excess2_pos;
-
-        /*std::cout << "min pos first range: " << excess1_pos << " rel: " << min_excess1 << " abs: " << e_m1 << std::endl;
-        std::cout << "min pos second range: " << excess2_pos << " rel: " << min_excess2 << " abs: " << e_m2 << std::endl;*/
-
-        auto array_pos = ((e_m1 < e_m2) ? bp_rs.rank1(excess1_pos + 1) : bp_rs.rank1(excess2_pos + 1)) - 1;
-
-        /*int64_t min_excess = std::numeric_limits<int64_t>::max();
-        int64_t excess_pos = bp_i;
-        int64_t excess = 0;
-
-        std::cout << "whole excess array: " << std::endl;
-
-        for(auto i = bp_i; i <= bp_j; ++i) {
-            if(bp[i]) ++excess;
-            else --excess;
-            std::cout << "i: " << i << ", bp[i]: " << bp[i]
-              << ", excess: " << excess
-              << ", min_excess: " << min_excess
-              << ", excess_pos: " << excess_pos << std::endl;
-            min_excess = (excess <= min_excess) ? excess : min_excess;
-            excess_pos = (excess <= min_excess) ? i : excess_pos;
-        }std::cout << std::endl;
-
-        std::cout << "real min pos: " << excess_pos << std::endl;*/
+        // notice: the rank operation can be avoided
+        // but it requires a lot of operations, don't know
+        // if it make sense in practice.
+        auto array_pos = ((min_exc1 < min_exc2) ? bp_rs.rank1(pos_min_exc1 + 1) : bp_rs.rank1(pos_min_exc2 + 1)) - 1;
 
         return (reversed) ? mirror(array_pos) : array_pos;
     }
 
     inline size_t size() const {
-        //std::cout << "pm RMQ: " << excess_array_rmq.size() << " bp: " << bp.size() << " rs_bp: " << bp_rs.space_usage() * CHAR_BIT << std::endl;
         return excess_array_rmq.size() 
                 + (bp_rs.space_usage() * CHAR_BIT) 
                 + bp.size() + sizeof(size_t) + sizeof(bool);
@@ -213,8 +146,6 @@ private:
     template<bool reverse>
     int64_t build_cartesian_tree(const std::vector<K> &data, bool write = false) {
         int64_t max_excess = 0, curr_excess = 0;
-
-        //std::cout << "reverse: " << reverse << " ";
 
         if(data.size() > 0) [[likely]] {
             int64_t curr = (reverse) ? data.size() - 1 : 0;
@@ -250,8 +181,6 @@ private:
                 curr += (reverse) ? -1 : 1;
             }
         }
-
-        //std::cout << "depth: " << max_excess << std::endl;
 
         return max_excess;
     }
