@@ -124,11 +124,11 @@ inline void min_excess_word(const uint64_t word, int64_t &exc, const size_t word
  * @return a pair consisting of the position of the rightmost minimum excess
  *          and its value 
  */
-inline std::pair<size_t, int64_t> min_excess(const pasta::BitVector &bv, int64_t exc_i,
+inline std::pair<size_t, int64_t> min_excess_scan(const pasta::BitVector &bv, int64_t exc_i,
                                                  const size_t i, const size_t j) {
     if (i == j) [[unlikely]] {
         const int64_t excess = bv[i] ? 1 : -1;
-        return std::make_pair(i, excess);
+        return std::make_pair(i, exc_i + excess);
     }
 
     const size_t w_i = i / 64;

@@ -10,7 +10,7 @@
 
 using query_type = std::pair<size_t, size_t>;
 
-std::pair<size_t, int64_t> min_excess_scan(const pasta::BitVector &bitvector,
+std::pair<size_t, int64_t> real_min_excess(const pasta::BitVector &bitvector,
                                             const size_t i, const size_t j) {
     int64_t min_excess = std::numeric_limits<int64_t>::max();
     size_t min_excess_idx = 0;
@@ -77,8 +77,8 @@ std::vector<query_type> BitVectorTest::queries;
 TEST_F(BitVectorTest, SameWordQueries) {
     for(size_t i = 0; i < 64; ++i) {
         for(size_t j = i; j < 64; ++j) {
-            auto [expected_min_pos, expected_min] = min_excess_scan(bitvector, i, j);
-            auto [computed_min_pos, computed_min] = min_excess(bitvector, 0, i, j);
+            auto [expected_min_pos, expected_min] = real_min_excess(bitvector, i, j);
+            auto [computed_min_pos, computed_min] = min_excess_scan(bitvector, 0, i, j);
             ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << i << ", j = " << j;
             ASSERT_EQ(expected_min, computed_min) << " Query i = " << i << ", j = " << j;
         }
@@ -88,8 +88,8 @@ TEST_F(BitVectorTest, SameWordQueries) {
 TEST_F(BitVectorTest, BetweenWordQueries) {
     for(size_t i = 0; i < 64; ++i) {
         for(size_t j = 64; j < 128; ++j) {
-            auto [expected_min_pos, expected_min] = min_excess_scan(bitvector, i, j);
-            auto [computed_min_pos, computed_min] = min_excess(bitvector, 0, i, j);
+            auto [expected_min_pos, expected_min] = real_min_excess(bitvector, i, j);
+            auto [computed_min_pos, computed_min] = min_excess_scan(bitvector, 0, i, j);
             ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << i << ", j = " << j;
             ASSERT_EQ(expected_min, computed_min) << " Query i = " << i << ", j = " << j;
         }
@@ -100,8 +100,8 @@ TEST_F(BitVectorTest, GeneralQueries) {
     for(const query_type &q : queries) {
         const size_t i = q.first;
         const size_t j = q.second;
-        auto [expected_min_pos, expected_min] = min_excess_scan(bitvector, i, j);
-        auto [computed_min_pos, computed_min] = min_excess(bitvector, 0, i, j);
+        auto [expected_min_pos, expected_min] = real_min_excess(bitvector, i, j);
+        auto [computed_min_pos, computed_min] = min_excess_scan(bitvector, 0, i, j);
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << i << ", j = " << j;
         ASSERT_EQ(expected_min, computed_min) << " Query i = " << i << ", j = " << j;
     }
