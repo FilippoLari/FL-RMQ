@@ -33,12 +33,6 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
     return std::make_pair(min, idx);
 }
 
-/*typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 64>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 128>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024>> NonSystTypes;*/
-
 typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
                             SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
                             SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256>,

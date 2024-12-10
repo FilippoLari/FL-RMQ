@@ -186,33 +186,42 @@ private:
         const size_t start = l / Samples;
         const size_t end = h / Samples;
 
-        int64_t pos_min_exc, min_exc;
+        int64_t pos_min_exc = pos_min_exc_samples[start], min_exc = min_exc_samples[start];
+        size_t sample_idx = start;
 
-        if(l % Samples == 0) [[unlikely]] {
-            pos_min_exc = pos_min_exc_samples[start] + (start * Samples);
-            min_exc = min_exc_samples[start];
-        } else [[likely]] {
-            // notice (start + 1) * Samples - 1 is never >= bp.size() because of the initial check
-            std::tie(pos_min_exc, min_exc) = min_excess_scan(bp, exc_l, l, (start + 1) * Samples - 1);
-        }
-
-        for(size_t k = start + 1; k < end; ++k) {
+        for(size_t k = start + 1; k <= end; ++k) {
             if(min_exc_samples[k] <= min_exc) {
                 min_exc = min_exc_samples[k];
-                pos_min_exc = pos_min_exc_samples[k] + (k * Samples);
+                pos_min_exc = pos_min_exc_samples[k];
+                sample_idx = k;
             }
         }
 
-        if(h % (Samples - 1) == 0) [[unlikely]] {
-            pos_min_exc = (min_exc_samples[end] <= min_exc) ? pos_min_exc_samples[end] + (end * Samples) : pos_min_exc;
-            min_exc = (min_exc_samples[end] <= min_exc) ? min_exc_samples[end] : min_exc;
-        } else [[likely]] {
+        pos_min_exc = pos_min_exc + (sample_idx * Samples);
+
+        if(pos_min_exc >= l && pos_min_exc <= h) [[likely]] {
+            return std::make_pair(pos_min_exc, min_exc);
+        } else [[unlikely]] {
+            
+            // notice (start + 1) * Samples - 1 is never >= bp.size() because of the initial check
+            std::tie(pos_min_exc, min_exc) = min_excess_scan(bp, exc_l, l, (start + 1) * Samples - 1);
+
+            // can be avoided
+
+            for(size_t k = start + 1; k < end; ++k) {
+                if(min_exc_samples[k] <= min_exc) {
+                    min_exc = min_exc_samples[k];
+                    pos_min_exc = pos_min_exc_samples[k] + (k * Samples);
+                    sample_idx = k;
+                }
+            }
+
             const auto [last_min_pos, last_min_exc] = min_excess_scan(bp, exc_samples[end - 1], end * Samples, h);
             pos_min_exc = (last_min_exc <= min_exc) ? last_min_pos : pos_min_exc;
             min_exc = (last_min_exc <= min_exc) ? last_min_exc : min_exc;
-        }
 
-        return std::make_pair(pos_min_exc, min_exc);
+            return std::make_pair(pos_min_exc, min_exc);
+        }
     }
 
     template<bool reverse>
