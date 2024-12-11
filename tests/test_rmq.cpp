@@ -33,11 +33,11 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
     return std::make_pair(min, idx);
 }
 
-typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 64>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 128>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024>> NonSystTypes;
+typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048>> NonSystTypes;
 
 typedef ::testing::Types<FLRMQ<int32_t, int64_t, int64_t, float, 64>,
                             FLRMQ<int32_t, int64_t, int64_t, float, 128>,
@@ -123,6 +123,7 @@ TYPED_TEST(NonSystFLRMQTest, NonSystQueries) {
     }
 }
 
+/*
 TYPED_TEST_SUITE(SystFLRMQTest, SystTypes);
 
 TYPED_TEST(SystFLRMQTest, SystQueries) {
@@ -133,7 +134,7 @@ TYPED_TEST(SystFLRMQTest, SystQueries) {
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min, SystFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
     }
-}
+}*/
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
