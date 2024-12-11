@@ -8,10 +8,14 @@
 #include <numeric>
 #include <stack>
 #include <tuple>
+#include <cmath>
 
 #include <pasta/bit_vector/bit_vector.hpp>
 #include <pasta/bit_vector/support/find_l2_flat_with.hpp>
 #include <pasta/bit_vector/support/flat_rank_select.hpp>
+
+#include <sdsl/int_vector.hpp>
+#include <sdsl/util.hpp>
 
 #include "bp_utils.hpp"
 #include "fl_rmq.hpp"
@@ -48,12 +52,16 @@ public:
 };
 
 template<typename K, typename Range, typename Pos,
- typename Floating = float, size_t Epsilon = 256>
+ typename Floating = float, size_t Epsilon = 256, size_t Samples = 2048>
 class SuccinctFLRMQ {
     
     pasta::BitVector bp;
     pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES,
                             pasta::FindL2FlatWith::BINARY_SEARCH> bp_rs;
+
+    sdsl::int_vector<> exc_samples;
+    sdsl::int_vector<> min_exc_samples;
+    sdsl::int_vector<> pos_min_exc_samples;
 
     ExcessFLRMQ<int64_t, Range, Pos, Floating, Epsilon> excess_array_rmq;
 
@@ -90,6 +98,8 @@ public:
             excess_array.push_back(excess);
         }
 
+        sample_excess_array(excess_array);
+
         excess_array_rmq = ExcessFLRMQ<int64_t, Range, Pos, Floating, Epsilon>(excess_array);
 
         bp_rs = pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES, 
@@ -107,13 +117,13 @@ public:
 
         const auto [l1, h1, l2, h2] = excess_array_rmq.query(bp_i, bp_j);
 
-        // rightmost +-1 rmq using precomputed tables
+        int64_t exc_l1 = 2 * bp_rs.rank1(l1) - l1;
+        int64_t exc_l2 = 2 * bp_rs.rank1(l2) - l2;
 
-        int64_t exc_l1 = 2 * bp_rs.rank1(l1) - (l1 + 1);
-        int64_t exc_l2 = 2 * bp_rs.rank1(l2) - (l2 + 1);
+        // rightmost +-1 rmq using the sampled excess array and precomputed tables
 
-        const auto [pos_min_exc1, min_exc1] = min_excess_scan(bp, exc_l1, l1, h1);
-        const auto [pos_min_exc2, min_exc2] = min_excess_scan(bp, exc_l2, l2, h2);
+        const auto [pos_min_exc1, min_exc1] = min_excess(exc_l1, l1, h1);
+        const auto [pos_min_exc2, min_exc2] = min_excess(exc_l2, l2, h2);
 
         // notice: the rank operation can be avoided
         // but it requires a lot of operations, don't know
@@ -126,13 +136,92 @@ public:
     inline size_t size() const {
         return excess_array_rmq.size() 
                 + (bp_rs.space_usage() * CHAR_BIT) 
+                + exc_samples.bit_size()
+                + min_exc_samples.bit_size()
+                + pos_min_exc_samples.bit_size()
                 + bp.size() + sizeof(size_t) + sizeof(bool);
     }
 
 private:
 
+    inline void sample_excess_array(const std::vector<int64_t> &excess_array) {
+        const size_t excess_size = excess_array.size();
+        const size_t samples = (excess_size / Samples) + 2;
+
+        exc_samples = sdsl::int_vector<>(samples, 0);
+        min_exc_samples = sdsl::int_vector<>(samples, 0);
+        pos_min_exc_samples = sdsl::int_vector<>(samples, 0);
+
+        for(size_t i = 0; i < excess_size; i += Samples) {
+            int64_t min_exc = excess_array[i];
+            int64_t pos_min_exc = 0;
+
+            for(size_t j = 1; i + j < excess_size && j < Samples; ++j) {
+                if(excess_array[i + j] <= min_exc) {
+                    min_exc = excess_array[i + j];
+                    pos_min_exc = j;
+                }
+            }
+
+            exc_samples[i / Samples] = (i + Samples - 1 < excess_size) ? excess_array[i + Samples - 1] : excess_array.back();
+            min_exc_samples[i / Samples] = min_exc;
+            pos_min_exc_samples[i / Samples] = pos_min_exc;
+        }
+
+        sdsl::util::bit_compress(exc_samples);
+        sdsl::util::bit_compress(min_exc_samples);
+        sdsl::util::bit_compress(pos_min_exc_samples);
+    }
+
     inline size_t mirror(const size_t i) const {
         return n - i - 1;
+    }
+
+    inline std::pair<size_t, int64_t> min_excess(const int64_t exc_l, const size_t l, const size_t h) const {
+        
+        if(h - l < Samples) [[unlikely]] {
+            return min_excess_scan(bp, exc_l, l, h);
+        }
+
+        const size_t start = l / Samples;
+        const size_t end = h / Samples;
+
+        int64_t pos_min_exc = pos_min_exc_samples[start], min_exc = min_exc_samples[start];
+        size_t sample_idx = start;
+
+        for(size_t k = start + 1; k <= end; ++k) {
+            if(min_exc_samples[k] <= min_exc) {
+                min_exc = min_exc_samples[k];
+                pos_min_exc = pos_min_exc_samples[k];
+                sample_idx = k;
+            }
+        }
+
+        pos_min_exc = pos_min_exc + (sample_idx * Samples);
+
+        if(pos_min_exc >= l && pos_min_exc <= h) [[likely]] {
+            return std::make_pair(pos_min_exc, min_exc);
+        } else [[unlikely]] {
+            
+            // notice (start + 1) * Samples - 1 is never >= bp.size() because of the initial check
+            std::tie(pos_min_exc, min_exc) = min_excess_scan(bp, exc_l, l, (start + 1) * Samples - 1);
+
+            // can be avoided
+
+            for(size_t k = start + 1; k < end; ++k) {
+                if(min_exc_samples[k] <= min_exc) {
+                    min_exc = min_exc_samples[k];
+                    pos_min_exc = pos_min_exc_samples[k] + (k * Samples);
+                    sample_idx = k;
+                }
+            }
+
+            const auto [last_min_pos, last_min_exc] = min_excess_scan(bp, exc_samples[end - 1], end * Samples, h);
+            pos_min_exc = (last_min_exc <= min_exc) ? last_min_pos : pos_min_exc;
+            min_exc = (last_min_exc <= min_exc) ? last_min_exc : min_exc;
+
+            return std::make_pair(pos_min_exc, min_exc);
+        }
     }
 
     template<bool reverse>

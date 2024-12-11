@@ -6,7 +6,7 @@
 #include <random>
 #include <tuple>
 
-#include "fl_rmq_succ_2.hpp"
+#include "fl_rmq_succ.hpp"
 #include "fl_rmq.hpp"
 
 using query_type = std::pair<size_t, size_t>;
