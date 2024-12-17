@@ -17,11 +17,12 @@
 #include <sdsl/int_vector.hpp>
 #include <sdsl/util.hpp>
 
+#include "top_level_sparse_table.hpp"
 #include "bp_utils.hpp"
 #include "fl_rmq.hpp"
 
 template<typename K, typename Range, typename Pos,
- typename Floating = float, size_t Epsilon = 256>
+ typename Floating = float, size_t Epsilon = 4096>
 class ExcessFLRMQ : public FLRMQ<K, Range, Pos, Floating, Epsilon> {
 
 public:
@@ -52,9 +53,12 @@ public:
 };
 
 template<typename K, typename Range, typename Pos,
- typename Floating = float, size_t Epsilon = 256, size_t Samples = 2048>
+ typename Floating = float, size_t Epsilon = 4096,
+ size_t ExcSamples = 2048, size_t DataSamples = 0>
 class SuccinctFLRMQ {
-    
+    static_assert(ExcSamples > 0);
+    static_assert(ExcSamples <= Epsilon);
+
     pasta::BitVector bp;
     pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES,
                             pasta::FindL2FlatWith::BINARY_SEARCH> bp_rs;
@@ -64,6 +68,11 @@ class SuccinctFLRMQ {
     sdsl::int_vector<> pos_min_exc_samples;
 
     ExcessFLRMQ<int64_t, Range, Pos, Floating, Epsilon> excess_array_rmq;
+
+    sdsl::int_vector<> min_data_samples;
+    sdsl::int_vector<> pos_min_data_samples;
+
+    TopLevelSparseTable<sdsl::int_vector<>> top_level_st;
 
     bool reversed;
     size_t n;
@@ -104,9 +113,25 @@ public:
 
         bp_rs = pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES, 
                                         pasta::FindL2FlatWith::BINARY_SEARCH>(bp);
+
+        if constexpr (DataSamples > 0) {
+            sample_data(data);
+            top_level_st = TopLevelSparseTable<sdsl::int_vector<>>(&min_data_samples);
+        }
     }
 
     [[nodiscard]] size_t query(const size_t i, const size_t j) const {
+        if constexpr (DataSamples > 0) {
+            const size_t ds_i = i / DataSamples;
+            const size_t ds_j = j / DataSamples;
+
+            const size_t min_sample = top_level_st.query(ds_i, ds_j);
+            assert(min_sample >= 0 && min_sample < pos_min_data_samples.size());
+            const size_t min_idx = pos_min_data_samples[min_sample] + min_sample * DataSamples;
+
+            if(i <= min_idx && min_idx <= j) return min_idx;
+        }
+        
         size_t m_i = (reversed) ? mirror(i) : i;
         size_t m_j = (reversed) ? mirror(j) : j;
 
@@ -115,15 +140,22 @@ public:
         const size_t bp_i = bp_rs.select1(m_i + 2) - 1;
         const size_t bp_j = bp_rs.select1(m_j + 2);
 
+        // linear scan with precomputed tables and sampled
+        // excess array if the range is small
+
+        if(bp_j - bp_i + 1 <= 2 * Epsilon + 2) {
+            const auto [pos_min, _] = min_excess(bp_i, bp_j);
+            const auto array_pos = bp_rs.rank1(pos_min + 1) - 1;
+            return (reversed) ? mirror(array_pos) : array_pos;
+        }
+
+        // rightmost +-1 rmq on the reduced intervals using
+        // the precomputed tables and sampled excess array 
+
         const auto [l1, h1, l2, h2] = excess_array_rmq.query(bp_i, bp_j);
 
-        int64_t exc_l1 = 2 * bp_rs.rank1(l1) - l1;
-        int64_t exc_l2 = 2 * bp_rs.rank1(l2) - l2;
-
-        // rightmost +-1 rmq using the sampled excess array and precomputed tables
-
-        const auto [pos_min_exc1, min_exc1] = min_excess(exc_l1, l1, h1);
-        const auto [pos_min_exc2, min_exc2] = min_excess(exc_l2, l2, h2);
+        const auto [pos_min_exc1, min_exc1] = min_excess(l1, h1);
+        const auto [pos_min_exc2, min_exc2] = min_excess(l2, h2);
 
         // notice: the rank operation can be avoided
         // but it requires a lot of operations, don't know
@@ -134,7 +166,10 @@ public:
     }
 
     inline size_t size() const {
-        return excess_array_rmq.size() 
+        return excess_array_rmq.size()
+                + min_data_samples.bit_size()
+                + pos_min_data_samples.bit_size() 
+                + top_level_st.size()
                 + (bp_rs.space_usage() * CHAR_BIT) 
                 + exc_samples.bit_size()
                 + min_exc_samples.bit_size()
@@ -144,28 +179,47 @@ public:
 
 private:
 
-    inline void sample_excess_array(const std::vector<int64_t> &excess_array) {
+    void sample_data(const std::vector<K> &data) {
+        auto samples = n / DataSamples + ((n % DataSamples) != 0);
+
+        min_data_samples = sdsl::int_vector<>(samples);
+        pos_min_data_samples = sdsl::int_vector<>(samples);
+
+        for(auto i = 0; i < samples; ++i) {
+            auto min_idx = i * DataSamples;
+            for(auto j = min_idx; j < (i+1) * DataSamples && j < n; ++j) {
+                if(data[j] < data[min_idx]) min_idx = j; // notice: leftmost minimum here
+            }
+            min_data_samples[i] = data[min_idx];
+            pos_min_data_samples[i] = min_idx - i * DataSamples;
+        }
+
+        sdsl::util::bit_compress(min_data_samples);
+        sdsl::util::bit_compress(pos_min_data_samples);
+    }
+
+    void sample_excess_array(const std::vector<int64_t> &excess_array) {
         const size_t excess_size = excess_array.size();
-        const size_t samples = (excess_size / Samples) + 2;
+        const size_t samples = (excess_size / ExcSamples) + 2;
 
         exc_samples = sdsl::int_vector<>(samples, 0);
         min_exc_samples = sdsl::int_vector<>(samples, 0);
         pos_min_exc_samples = sdsl::int_vector<>(samples, 0);
 
-        for(size_t i = 0; i < excess_size; i += Samples) {
+        for(size_t i = 0; i < excess_size; i += ExcSamples) {
             int64_t min_exc = excess_array[i];
             int64_t pos_min_exc = 0;
 
-            for(size_t j = 1; i + j < excess_size && j < Samples; ++j) {
+            for(size_t j = 1; i + j < excess_size && j < ExcSamples; ++j) {
                 if(excess_array[i + j] <= min_exc) {
                     min_exc = excess_array[i + j];
                     pos_min_exc = j;
                 }
             }
 
-            exc_samples[i / Samples] = (i + Samples - 1 < excess_size) ? excess_array[i + Samples - 1] : excess_array.back();
-            min_exc_samples[i / Samples] = min_exc;
-            pos_min_exc_samples[i / Samples] = pos_min_exc;
+            exc_samples[i / ExcSamples] = (i + ExcSamples - 1 < excess_size) ? excess_array[i + ExcSamples - 1] : excess_array.back();
+            min_exc_samples[i / ExcSamples] = min_exc;
+            pos_min_exc_samples[i / ExcSamples] = pos_min_exc;
         }
 
         sdsl::util::bit_compress(exc_samples);
@@ -177,14 +231,15 @@ private:
         return n - i - 1;
     }
 
-    inline std::pair<size_t, int64_t> min_excess(const int64_t exc_l, const size_t l, const size_t h) const {
+    inline std::pair<size_t, int64_t> min_excess(const size_t l, const size_t h) const {
         
-        if(h - l < Samples) [[unlikely]] {
+        if(h - l + 1 < ExcSamples) [[unlikely]] {
+            const auto exc_l = 2 * bp_rs.rank1(l) - l;
             return min_excess_scan(bp, exc_l, l, h);
         }
 
-        const size_t start = l / Samples;
-        const size_t end = h / Samples;
+        const size_t start = l / ExcSamples;
+        const size_t end = h / ExcSamples;
 
         int64_t pos_min_exc = pos_min_exc_samples[start], min_exc = min_exc_samples[start];
         size_t sample_idx = start;
@@ -197,26 +252,27 @@ private:
             }
         }
 
-        pos_min_exc = pos_min_exc + (sample_idx * Samples);
+        pos_min_exc = pos_min_exc + (sample_idx * ExcSamples);
 
         if(pos_min_exc >= l && pos_min_exc <= h) [[likely]] {
             return std::make_pair(pos_min_exc, min_exc);
         } else [[unlikely]] {
             
-            // notice (start + 1) * Samples - 1 is never >= bp.size() because of the initial check
-            std::tie(pos_min_exc, min_exc) = min_excess_scan(bp, exc_l, l, (start + 1) * Samples - 1);
+            const auto exc_l = 2 * bp_rs.rank1(l) - l;
 
-            // can be avoided
+            // notice (start + 1) * ExcSamples - 1 is never >= bp.size() because of the initial check
+            std::tie(pos_min_exc, min_exc) = min_excess_scan(bp, exc_l, l, (start + 1) * ExcSamples - 1);
 
+            // todo: can be avoided
             for(size_t k = start + 1; k < end; ++k) {
                 if(min_exc_samples[k] <= min_exc) {
                     min_exc = min_exc_samples[k];
-                    pos_min_exc = pos_min_exc_samples[k] + (k * Samples);
+                    pos_min_exc = pos_min_exc_samples[k] + (k * ExcSamples);
                     sample_idx = k;
                 }
             }
 
-            const auto [last_min_pos, last_min_exc] = min_excess_scan(bp, exc_samples[end - 1], end * Samples, h);
+            const auto [last_min_pos, last_min_exc] = min_excess_scan(bp, exc_samples[end - 1], end * ExcSamples, h);
             pos_min_exc = (last_min_exc <= min_exc) ? last_min_pos : pos_min_exc;
             min_exc = (last_min_exc <= min_exc) ? last_min_exc : min_exc;
 

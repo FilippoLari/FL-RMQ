@@ -6,6 +6,8 @@
 #include <random>
 #include <tuple>
 
+#include "top_level_sparse_table.hpp"
+
 #include "fl_rmq_succ.hpp"
 #include "fl_rmq.hpp"
 
@@ -32,6 +34,12 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
 
     return std::make_pair(min, idx);
 }
+
+typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16, 256>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32, 512>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256, 1024>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512, 2048>,
+                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048, 4096>> NonSystSampledTypes;
 
 typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
                             SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
@@ -96,6 +104,14 @@ template<typename T>
 std::vector<query_type> FLRMQTest<T>::queries;
 
 template <typename T>
+class NonSystSampledFLRMQTest : public FLRMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        FLRMQTest<T>::SetUpTestSuite();
+    }
+};
+
+template <typename T>
 class NonSystFLRMQTest : public FLRMQTest<T> {
 protected:
     static void SetUpTestSuite() {
@@ -111,6 +127,18 @@ protected:
     }
 };
 
+TYPED_TEST_SUITE(NonSystSampledFLRMQTest, NonSystSampledTypes);
+
+TYPED_TEST(NonSystSampledFLRMQTest, NonSystSampledQueries) {
+    TypeParam rmq_ds(NonSystFLRMQTest<TypeParam>::data);
+    for(const auto &q : NonSystFLRMQTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum(NonSystFLRMQTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(q.first, q.second);
+        ASSERT_EQ(expected_min, NonSystFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
+
 TYPED_TEST_SUITE(NonSystFLRMQTest, NonSystTypes);
 
 TYPED_TEST(NonSystFLRMQTest, NonSystQueries) {
@@ -118,12 +146,11 @@ TYPED_TEST(NonSystFLRMQTest, NonSystQueries) {
     for(const auto &q : NonSystFLRMQTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum(NonSystFLRMQTest<TypeParam>::data, q.first, q.second);
         const auto computed_min_pos = rmq_ds.query(q.first, q.second);
-        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min, NonSystFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
     }
 }
 
-/*
 TYPED_TEST_SUITE(SystFLRMQTest, SystTypes);
 
 TYPED_TEST(SystFLRMQTest, SystQueries) {
@@ -131,10 +158,10 @@ TYPED_TEST(SystFLRMQTest, SystQueries) {
     for(const auto &q : SystFLRMQTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum<int32_t, false>(SystFLRMQTest<TypeParam>::data, q.first, q.second);
         const auto computed_min_pos = rmq_ds.query(SystFLRMQTest<TypeParam>::data, q.first, q.second);
-        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min, SystFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
     }
-}*/
+}
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
