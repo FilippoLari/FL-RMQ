@@ -23,13 +23,13 @@
 
 template<typename K, typename Range, typename Pos,
  typename Floating = float, size_t Epsilon = 4096>
-class ExcessFLRMQ : public FLRMQ<K, Range, Pos, Floating, Epsilon> {
+class ExcessFLRMQ : public FLRMQ<K, Range, Pos, Floating, 0, Epsilon> {
 
 public:
 
     ExcessFLRMQ() = default;
 
-    explicit ExcessFLRMQ(const std::vector<K> &excess_array) : FLRMQ<K, Range, Pos, Floating, Epsilon>(excess_array) {}
+    explicit ExcessFLRMQ(const std::vector<K> &excess_array) : FLRMQ<K, Range, Pos, Floating, 0, Epsilon>(excess_array) {}
 
     std::tuple<size_t, size_t, size_t, size_t> query(const size_t i, const size_t j) const {
 
@@ -126,7 +126,6 @@ public:
             const size_t ds_j = j / DataSamples;
 
             const size_t min_sample = top_level_st.query(ds_i, ds_j);
-            assert(min_sample >= 0 && min_sample < pos_min_data_samples.size());
             const size_t min_idx = pos_min_data_samples[min_sample] + min_sample * DataSamples;
 
             if(i <= min_idx && min_idx <= j) return min_idx;

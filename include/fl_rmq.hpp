@@ -17,13 +17,14 @@
 #define SUB_DELTA(x, delta) ((x) <= delta ? 0 : ((x) - (delta)))
 
 template<typename K, typename Range, typename Pos,
- typename Floating = float, size_t Epsilon = 64, bool Rightmost = true>
+ typename Floating = float, size_t Samples = 0, size_t Epsilon = 64, bool Rightmost = true>
 class FLRMQ {
     static_assert(std::is_integral_v<K>);
     static_assert(std::is_integral_v<Range>);
     static_assert(std::is_integral_v<Pos>);
     static_assert(std::is_floating_point_v<Floating>);
     static_assert(Epsilon > 0);
+    static_assert(Samples >= 0);
 
 protected:
 
@@ -35,6 +36,8 @@ protected:
 
     std::vector<int64_t> first_segment; // todo: use the correct type
     std::vector<int64_t> deltas; // todo: use the correct type, each delta is at most nlog(n)
+
+    std::vector<int64_t> samples;
 
     size_t ranges;
     size_t n;
@@ -52,7 +55,7 @@ public:
         // initialize the PLA
         pla_model pla(Epsilon);
 
-        segments.reserve(n/Epsilon);
+        segments.reserve(n / Epsilon);
 
         int64_t d = 0, curr = 1, prev = 0, last = n - 1, r = n;
         const auto max_p = msb(n);
@@ -105,6 +108,10 @@ public:
 
         // avoid bounds checking when accessing the next diagonal at query time
         first_segment.push_back(segments.size()-1);
+
+        if constexpr (Samples > 0) {
+            sample(data);
+        }
     }
 
     /**
@@ -236,6 +243,25 @@ protected:
 
 private:
 
+    inline bool compare(const K a, const K b) const {
+        if constexpr (Rightmost)
+            return a <= b;
+        else 
+            return a < b;
+    }
+
+    void sample(const std::vector<K> &data) {
+        const size_t samples_size = (n / Samples) + 2;
+
+        samples = std::vector<int64_t>(samples_size, 0);
+
+        for(size_t i = 0; i < n; i += Samples) {
+            const auto [_, idx] = linear_scan_min(data, i,
+                                         std::min<size_t>(i + Samples - 1, n - 1));
+            samples[i / Samples] = idx;
+        }
+    }
+
     /**
      * Performs the insertion of a new point inside the PLA,
      * creating a new segment if necessary.
@@ -259,22 +285,67 @@ private:
      * @return a pair consisting of the minimum and its position inside [lo,hi]
      */
     inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_t lo, const size_t hi) const {
+
+        if constexpr (Samples > 0) {
+            
+            if(hi - lo + 1 < Samples) [[unlikely]]
+                return linear_scan_min(data, lo, hi);
+
+            const size_t block_start = lo / Samples;
+
+            const size_t block_end = hi / Samples;
+
+            K min = data[samples[block_start]];
+            size_t idx = block_start;
+
+            for(size_t k = block_start + 1; k <= block_end; ++k) {
+                if(compare(data[samples[k]], min)) {
+                    min = data[samples[k]];
+                    idx = samples[k];
+                }
+            }
+            
+            if(idx >= lo && idx <= hi) [[likely]] {
+                return std::make_pair(min, idx);
+            } else [[unlikely]] {
+                std::tie(min, idx) = linear_scan_min(data, lo, (block_start + 1) * Samples - 1);
+
+                // todo: can be avoided
+                for(size_t k = block_start + 1; k < block_end; ++k) {
+                    if(compare(data[samples[k]], min)) {
+                        min = data[samples[k]];
+                        idx = samples[k];
+                    }
+                }
+                
+                const auto [last_min, last_idx] = linear_scan_min(data, block_end * Samples, hi);
+                min = (compare(last_min, min)) ? last_min : min;
+                idx = (compare(last_min, min)) ? last_idx : idx;
+
+                return std::make_pair(min, idx);
+            }
+        } else {
+            return linear_scan_min(data, lo, hi);
+        }
+    }
+
+    inline std::pair<K, size_t> linear_scan_min(const std::vector<K> &data, const size_t lo, const size_t hi) const {
         K min = data[lo];
         size_t idx = lo;
-
+        
         for(auto i = lo; i <= hi; ++i)
-            if(min > data[i]) {
+            if(compare(data[i], min)) {
                 min = data[i];
                 idx = i;
             }
-
+        
         return std::make_pair(min, idx);
     }
 };
 
 template<typename K, typename Range, typename Pos,
- typename Floating, size_t Epsilon, bool Rightmost>
-struct FLRMQ<K, Range, Pos, Floating, Epsilon, Rightmost>::Segment {
+ typename Floating, size_t Epsilon, size_t Sample, bool Rightmost>
+struct FLRMQ<K, Range, Pos, Floating, Epsilon, Sample, Rightmost>::Segment {
     Range range;
     Floating slope;
     Pos intercept;
