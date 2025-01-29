@@ -17,7 +17,7 @@
 #include <sdsl/int_vector.hpp>
 #include <sdsl/util.hpp>
 
-#include "top_level_sparse_table.hpp"
+#include "sparse_table.hpp"
 #include "bp_utils.hpp"
 #include "fl_rmq.hpp"
 
@@ -33,7 +33,7 @@ public:
 
     std::tuple<size_t, size_t, size_t, size_t> query(const size_t i, const size_t j) const {
 
-        const auto k = this->msb(j - i + 1);
+        const auto k = sdsl::bits::hi(j - i + 1);
 
         const auto e1 = this->encode(i, i + (1 << k) - 1);
         const auto e2 = this->encode(j - (1 << k) + 1, j);
@@ -72,7 +72,7 @@ class SuccinctFLRMQ {
     sdsl::int_vector<> min_data_samples;
     sdsl::int_vector<> pos_min_data_samples;
 
-    TopLevelSparseTable<sdsl::int_vector<>> top_level_st;
+    SparseTable<sdsl::int_vector<>> top_level_st;
 
     bool reversed;
     size_t n;
@@ -116,7 +116,7 @@ public:
 
         if constexpr (DataSamples > 0) {
             sample_data(data);
-            top_level_st = TopLevelSparseTable<sdsl::int_vector<>>(&min_data_samples);
+            top_level_st = SparseTable<sdsl::int_vector<>>(&min_data_samples);
         }
     }
 
