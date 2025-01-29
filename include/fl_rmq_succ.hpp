@@ -1,18 +1,19 @@
 #pragma once
 
-#include <limits>
+#include <unordered_map>
+#include <iostream>
 #include <cstdlib>
 #include <climits>
-#include <iostream>
 #include <cassert>
 #include <numeric>
+#include <limits>
 #include <stack>
 #include <tuple>
 #include <cmath>
 
-#include <pasta/bit_vector/bit_vector.hpp>
 #include <pasta/bit_vector/support/find_l2_flat_with.hpp>
 #include <pasta/bit_vector/support/flat_rank_select.hpp>
+#include <pasta/bit_vector/bit_vector.hpp>
 
 #include <sdsl/int_vector.hpp>
 #include <sdsl/util.hpp>
@@ -38,14 +39,16 @@ public:
         const auto e1 = this->encode(i, i + (1 << k) - 1);
         const auto e2 = this->encode(j - (1 << k) + 1, j);
 
-        const auto first = std::next(this->segments.begin(), this->first_segment[k]);
-        const auto last = std::next(this->segments.begin(), this->first_segment[k+1]);
+        const auto first = std::next(this->ranges.begin(), this->first_segment[k]);
+        const auto last = std::next(this->ranges.begin(), this->first_segment[k+1]);
 
         auto it_s1 = this->segment_for_range(e1, first, last+1);
         auto it_s2 = this->segment_for_range(e2, it_s1, last+1);
 
-        auto [lo1, hi1] = this->reduce_interval(it_s1, e1, this->deltas[k], i, i + (1 << k) - 1);
-        auto [lo2, hi2] = this->reduce_interval(it_s2, e2, this->deltas[k], j - (1 << k) + 1, j);
+        auto [lo1, hi1] = this->reduce_interval(std::distance(this->ranges.begin(), it_s1),
+                                                 e1, this->deltas[k], i, i + (1 << k) - 1);
+        auto [lo2, hi2] = this->reduce_interval(std::distance(this->ranges.begin(), it_s2),
+                                                 e2, this->deltas[k], j - (1 << k) + 1, j);
 
         return std::make_tuple(lo1, hi1, lo2, hi2);
     }
@@ -181,6 +184,7 @@ private:
     void sample_data(const std::vector<K> &data) {
         auto samples = n / DataSamples + ((n % DataSamples) != 0);
 
+        std::vector<K> tmp_min_data_samples(samples);
         min_data_samples = sdsl::int_vector<>(samples);
         pos_min_data_samples = sdsl::int_vector<>(samples);
 
@@ -189,9 +193,27 @@ private:
             for(auto j = min_idx; j < (i+1) * DataSamples && j < n; ++j) {
                 if(data[j] < data[min_idx]) min_idx = j; // notice: leftmost minimum here
             }
-            min_data_samples[i] = data[min_idx];
+            tmp_min_data_samples[i] = data[min_idx];
             pos_min_data_samples[i] = min_idx - i * DataSamples;
         }
+
+        // since data can contain arbitrarily large values
+        // we remap its content into [1, n / DataSamples].
+        // Notice that this does not change the result of any query
+
+        std::vector<K> sorted_samples = tmp_min_data_samples;
+        std::sort(sorted_samples.begin(), sorted_samples.end());
+
+        std::unordered_map<K, size_t> rank_map;
+        size_t rank = 0;
+
+        for(const auto &sample : sorted_samples) {
+            if(rank_map.find(sample) == rank_map.end())
+                rank_map[sample] = rank++;
+        }
+
+        for(auto i = 0; i < tmp_min_data_samples.size(); ++i)
+            min_data_samples[i] = rank_map[tmp_min_data_samples[i]];
 
         sdsl::util::bit_compress(min_data_samples);
         sdsl::util::bit_compress(pos_min_data_samples);

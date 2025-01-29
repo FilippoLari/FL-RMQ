@@ -164,7 +164,6 @@ protected:
     }
 };
 
-/*
 TYPED_TEST_SUITE(EncodingSampledFLRMQTest, EncodingSampledTypes);
 
 TYPED_TEST(EncodingSampledFLRMQTest, EncodingSampledQueries) {
@@ -211,7 +210,7 @@ TYPED_TEST(IndexingFLRMQTest, IndexingQueries) {
         ASSERT_EQ(expected_min, IndexingFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
     }
-}*/
+}
 
 TYPED_TEST_SUITE(BlockDecompositionTest, BlockDecompositionTypes);
 
