@@ -6,8 +6,9 @@
 #include <random>
 #include <tuple>
 
-#include "sparse_table.hpp"
 #include "block_decomposition.hpp"
+#include "sparse_table.hpp"
+#include "segment_tree.hpp"
 #include "fl_rmq_succ.hpp"
 #include "fl_rmq.hpp"
 
@@ -64,7 +65,9 @@ typedef ::testing::Types<BlockDecomposition<int32_t, int32_t, 10>,
                             BlockDecomposition<int32_t, int32_t, 1000>,
                             BlockDecomposition<int32_t, int32_t, 10000>> BlockDecompositionTypes;
 
-typedef ::testing::Types<SparseTable<std::vector<int32_t>>> SparseTableTypes;
+typedef ::testing::Types<SparseTable<std::vector<int32_t>>> SparseTableType;
+
+typedef ::testing::Types<SegmentTree<int32_t, int32_t>> SegmentTreeType;
 
 template <typename T>
 class RMQTest : public ::testing::Test {
@@ -164,6 +167,14 @@ protected:
     }
 };
 
+template <typename T>
+class SegmentTreeTest : public RMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        RMQTest<T>::SetUpTestSuite();
+    }
+};
+
 TYPED_TEST_SUITE(EncodingSampledFLRMQTest, EncodingSampledTypes);
 
 TYPED_TEST(EncodingSampledFLRMQTest, EncodingSampledQueries) {
@@ -190,7 +201,7 @@ TYPED_TEST(EncodingFLRMQTest, EncodingQueries) {
 
 TYPED_TEST_SUITE(IndexingSampledFLRMQTest, IndexingSampledTypes);
 
-TYPED_TEST(IndexingSampledFLRMQTest, IndexingQueries) {
+TYPED_TEST(IndexingSampledFLRMQTest, Queries) {
     TypeParam rmq_ds(IndexingSampledFLRMQTest<TypeParam>::data);
     for(const auto &q : IndexingSampledFLRMQTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum<int32_t, false>(IndexingSampledFLRMQTest<TypeParam>::data, q.first, q.second);
@@ -202,7 +213,7 @@ TYPED_TEST(IndexingSampledFLRMQTest, IndexingQueries) {
 
 TYPED_TEST_SUITE(IndexingFLRMQTest, IndexingTypes);
 
-TYPED_TEST(IndexingFLRMQTest, IndexingQueries) {
+TYPED_TEST(IndexingFLRMQTest, Queries) {
     TypeParam rmq_ds(IndexingFLRMQTest<TypeParam>::data);
     for(const auto &q : IndexingFLRMQTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum<int32_t, false>(IndexingFLRMQTest<TypeParam>::data, q.first, q.second);
@@ -214,7 +225,7 @@ TYPED_TEST(IndexingFLRMQTest, IndexingQueries) {
 
 TYPED_TEST_SUITE(BlockDecompositionTest, BlockDecompositionTypes);
 
-TYPED_TEST(BlockDecompositionTest, IndexingQueries) {
+TYPED_TEST(BlockDecompositionTest, Queries) {
     TypeParam rmq_ds(BlockDecompositionTest<TypeParam>::data);
     for(const auto &q : BlockDecompositionTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(BlockDecompositionTest<TypeParam>::data, q.first, q.second);
@@ -224,14 +235,26 @@ TYPED_TEST(BlockDecompositionTest, IndexingQueries) {
     }
 }
 
-TYPED_TEST_SUITE(SparseTableTest, SparseTableTypes);
+TYPED_TEST_SUITE(SparseTableTest, SparseTableType);
 
-TYPED_TEST(SparseTableTest, IndexingQueries) {
+TYPED_TEST(SparseTableTest, Queries) {
     TypeParam rmq_ds(&SparseTableTest<TypeParam>::data);
     for(const auto &q : SparseTableTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(SparseTableTest<TypeParam>::data, q.first, q.second);
         const auto computed_min_pos = rmq_ds.query(q.first, q.second);
         ASSERT_EQ(expected_min, SparseTableTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
+
+TYPED_TEST_SUITE(SegmentTreeTest, SegmentTreeType);
+
+TYPED_TEST(SegmentTreeTest, Queries) {
+    TypeParam rmq_ds(SegmentTreeTest<TypeParam>::data);
+    for(const auto &q : SegmentTreeTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(SegmentTreeTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(q.first, q.second);
+        ASSERT_EQ(expected_min, SegmentTreeTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
     }
 }
