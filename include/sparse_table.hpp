@@ -63,6 +63,6 @@ public:
         auto table_size = 0;
         for(const auto &row : table)
             table_size += row.bit_size();
-        return table_size + sizeof(data);
+        return table_size + (sizeof(data) * CHAR_BIT);
     }
 };

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <utility>
+#include <climits>
 
 #include <pasta/bit_vector/bit_vector.hpp>
 
@@ -75,6 +76,15 @@ constexpr int8_t pos_min_exc_byte[] = {
     4,4,4,4,4,4,4,4,4,4,4,4,1,1,0,0,
     3,3,3,3,3,3,0,0,2,2,2,2,1,1,0,0,
 };
+
+/**
+ * Returns the size in bit of all the precomputed tables.
+ */
+inline size_t precomputed_tables_size() {
+    return (sizeof(exc_byte) 
+            + sizeof(min_exc_byte) 
+            + sizeof(pos_min_exc_byte)) * CHAR_BIT;
+}
 
 /**
  * Computes the rightmost minimum excess and its position inside a 64-bit word.

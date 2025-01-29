@@ -182,11 +182,11 @@ public:
      * @return the size in bit of the data structure
      */
     inline size_t size() const {
+        const auto samples_size = ((Samples > 0)? samples.bit_size() : 0);
         return ((sizeof(Range) * ranges.size() + sizeof(Pos) * intercepts.size() + sizeof(Floating) * slopes.size()) 
                     + (deltas.size() * sizeof(int64_t))
                     + (first_segment.size() * sizeof(int64_t))
-                    + sizeof(size_t) 
-                    + ((Samples > 0)? samples.size() : 0)) * CHAR_BIT;
+                    + sizeof(size_t)) * CHAR_BIT + samples_size;
     }
 
 protected:

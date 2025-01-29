@@ -168,15 +168,17 @@ public:
     }
 
     inline size_t size() const {
+        const auto data_samples_size = (DataSamples > 0) ? min_data_samples.bit_size() 
+                                                            + pos_min_data_samples.bit_size() 
+                                                            + top_level_st.size() : 0;
         return excess_array_rmq.size()
-                + min_data_samples.bit_size()
-                + pos_min_data_samples.bit_size() 
-                + top_level_st.size()
+                + data_samples_size
+                + precomputed_tables_size()
                 + (bp_rs.space_usage() * CHAR_BIT) 
                 + exc_samples.bit_size()
                 + min_exc_samples.bit_size()
                 + pos_min_exc_samples.bit_size()
-                + bp.size() + sizeof(size_t) + sizeof(bool);
+                + bp.size() + (sizeof(size_t) + sizeof(bool)) * CHAR_BIT;
     }
 
 private:
