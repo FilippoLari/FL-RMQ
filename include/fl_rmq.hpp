@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include <limits>
+#include <iostream>
 #include <cstdlib>
 #include <climits>
-#include <iostream>
 #include <cassert>
 #include <numeric>
+#include <limits>
+#include <queue>
 
 #include "piecewise_linear_model.hpp"
 
@@ -68,17 +69,20 @@ public:
         ranges.reserve(n / Epsilon);
         intercepts.reserve(n / Epsilon);
 
-        int64_t d = 0, curr = 1, prev = 0, last = n - 1, r = n;
-        const auto max_p = sdsl::bits::hi(n);
+        const auto lg_eps = sdsl::bits::hi(2 * (Epsilon + 1)); 
+        const auto lg_n = sdsl::bits::hi(n);
 
-        // fill the first column
-        for(auto i = 0; i < n; ++i)
-            st[prev][i] = i;
+        // number of ranges originating from diagonals [0,lg_eps - 1]
+        // notice that lg_eps is always >= 1
+        int64_t r = lg_eps * (n + 1) - (1 << lg_eps) + 1; 
+
+        int64_t d = 0, curr = 1, prev = 0, last;
+
+        fill_column(data, st[prev], lg_eps);
         
-        deltas.reserve(max_p);
-        deltas.push_back(d);
+        deltas = std::vector<int64_t>(lg_n + 1, 0);
 
-        for(auto j = 1; j <= max_p; ++j) {
+        for(auto j = lg_eps; j <= lg_n; ++j) {
             // rmq(i, i+(1<<j)-1) = min{rmq(i,i+(1<<(j-1))-1), rmq(i+(1<<(j-1)), i+(1<<j)-1)}
             for(auto i = 0; i + (1 << j) <= n; ++i) {
             
@@ -88,11 +92,11 @@ public:
                     st[curr][i] = (data[st[prev][i]]<=data[st[prev][i+(1<<(j-1))]])? st[prev][i] : st[prev][i+(1<<(j-1))];
 
                 // it is true O(log(n)) times
-                if(i == 0 && last > st[curr][0]) [[unlikely]] {
+                if(j != lg_eps && i == 0 && last > st[curr][0]) [[unlikely]] {
                     d += (last - st[curr][0] + 1);
-                    deltas.push_back(d);
-                } else if (i == 0) [[unlikely]] {
-                    deltas.push_back(d);
+                    deltas[j] = d;
+                } else if (j != lg_eps && i == 0) [[unlikely]] {
+                    deltas[j] = d;
                 }         
 
                 last = st[curr][i];
@@ -111,16 +115,16 @@ public:
         ranges.push_back(range);
         intercepts.push_back(intercept);
 
-        first_segment.reserve(max_p+1);
+        first_segment = std::vector<int64_t>(lg_n + 1, 0);
 
         // todo: can be done while building the pla
-        for(auto j = 0; j <= max_p; ++j) {
-            auto first = std::prev(std::upper_bound(ranges.begin(), ranges.end(), encode(0, ((1<<j)-1))));
-            first_segment.push_back(std::distance(ranges.begin(), first));
+        for(auto j = lg_eps; j <= lg_n; ++j) {
+            auto first =  segment_for_range(encode(0, (1 << j)-1), ranges.begin(), ranges.end());
+            first_segment[j] = std::distance(ranges.begin(), first);
         }
 
         // avoid bounds checking when accessing the next diagonal at query time
-        first_segment.push_back(ranges.size()-1);
+        first_segment[lg_n] = ranges.size() - 1;
 
         if constexpr (Samples > 0) {
             sample(data);
@@ -138,7 +142,7 @@ public:
 
         const auto len = j - i + 1;
 
-        if(len <= 2 * Epsilon + 2) {
+        if(len <= 2 * (Epsilon + 1)) {
             return find_minimum(data, i, j).second;
         }
 
@@ -245,6 +249,33 @@ private:
             return a <= b;
         else 
             return a < b;
+    }
+
+    /**
+     * Initialize a generic column j of a sparse table without computing all the
+     * previous ones. It uses a sliding windows of size 2^(j-1) and runs in
+     * linear time and space.
+     * 
+     * @param data the input array
+     * @param column the sparse table column
+     * @param j the index of the column
+     */
+    void fill_column(const std::vector<K> &data, std::vector<int64_t> &column,
+                            const size_t j) {
+        const auto w = (1 << (j - 1)); // lg_eps is always >= 1
+
+        std::deque<size_t> q;
+
+        for(auto i = 0; i < n; ++i) {
+
+            while(!q.empty() && q.front() + w <= i) q.pop_front();
+        
+            while(!q.empty() && compare(data[i], data[q.back()])) q.pop_back();
+
+            q.push_back(i);
+
+            if(i + 1 >= w) column[i + 1 - w] = q.front();
+        }
     }
 
     void sample(const std::vector<K> &data) {
