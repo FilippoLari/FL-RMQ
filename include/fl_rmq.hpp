@@ -72,40 +72,34 @@ public:
         const auto lg_eps = sdsl::bits::hi(2 * (Epsilon + 1)); 
         const auto lg_n = sdsl::bits::hi(n);
 
-        // number of ranges originating from diagonals [0,lg_eps - 1]
-        // notice that lg_eps is always >= 1
-        int64_t r = lg_eps * (n + 1) - (1 << lg_eps) + 1; 
-
-        int64_t d = 0, curr = 1, prev = 0, last;
+        int64_t d = 0, curr = 1, prev = 0;
 
         fill_column(data, st[prev], lg_eps);
+
+        // number of ranges originating from diagonals [0, lg_eps - 1]
+        int64_t r = lg_eps * (n + 1) - (1 << lg_eps) + 1; 
+
+        // last element of the column lg_eps - 1
+        // notice that lg_eps is always >= 1
+        int64_t last = st[prev][n - (1 << (lg_eps - 1)) + 1];
         
         deltas = std::vector<int64_t>(lg_n + 1, 0);
 
         for(auto j = lg_eps; j <= lg_n; ++j) {
-            // rmq(i, i+(1<<j)-1) = min{rmq(i,i+(1<<(j-1))-1), rmq(i+(1<<(j-1)), i+(1<<j)-1)}
-            for(auto i = 0; i + (1 << j) <= n; ++i) {
-            
-                if constexpr (Rightmost)
-                    st[curr][i] = (data[st[prev][i]]<data[st[prev][i+(1<<(j-1))]])? st[prev][i] : st[prev][i+(1<<(j-1))];
-                else
-                    st[curr][i] = (data[st[prev][i]]<=data[st[prev][i+(1<<(j-1))]])? st[prev][i] : st[prev][i+(1<<(j-1))];
+            st[curr][0] = (cmp_elements(data[st[prev][0]], data[st[prev][1<<(j-1)]]))?
+                                     st[prev][0] : st[prev][1<<(j-1)];
 
-                // it is true O(log(n)) times
-                if(j != lg_eps && i == 0 && last > st[curr][0]) [[unlikely]] {
-                    d += (last - st[curr][0] + 1);
-                    deltas[j] = d;
-                } else if (j != lg_eps && i == 0) [[unlikely]] {
-                    deltas[j] = d;
-                }         
+            update_deltas(st[prev], st[curr][0], lg_eps, j, d);
 
-                last = st[curr][i];
+            for(auto i = 1; (i + (1 << j)) <= n; ++i) {
+                st[curr][i] = (cmp_elements(data[st[prev][i]], data[st[prev][i+(1<<(j-1))]]))? 
+                                    st[prev][i] : st[prev][i+(1<<(j-1))];
 
                 insert_point(r, st[curr][i] + d, pla);
 
                 ++r;
             }
-            std::swap(curr, prev);
+            std::swap(prev, curr);
         }
 
         // add the last segment
@@ -244,11 +238,39 @@ protected:
 
 private:
 
-    inline bool compare(const K a, const K b) const {
+    /**
+     * Perform the comparison beetween two elements a and b, based
+     * on the template parameter Rightmost. Notice that a is assumed 
+     * to be at the left of b.
+     * 
+     * @param a the first element
+     * @param b the second element
+     */
+    inline constexpr bool compare(const K a, const K b) const {
         if constexpr (Rightmost)
             return a <= b;
         else 
             return a < b;
+    }
+
+    inline constexpr bool cmp_elements(const K a, const K b) const {
+        if constexpr (Rightmost) 
+            return a < b;
+        else
+            return a <= b;
+    }
+
+    inline void update_deltas(const std::vector<int64_t> &prev_column, const int64_t first,
+                         const size_t lg_eps, const size_t j, int64_t &d) {
+
+        const auto last = prev_column[n - (1 << (j - 1) + 1)];
+
+        if(j != lg_eps && last > first) [[likely]] {
+            d += (last - first + 1);
+            deltas[j] = d;
+        } else [[unlikely]] {
+            deltas[j] = d;
+        }
     }
 
     /**
@@ -262,7 +284,7 @@ private:
      */
     void fill_column(const std::vector<K> &data, std::vector<int64_t> &column,
                             const size_t j) {
-        const auto w = (1 << (j - 1)); // lg_eps is always >= 1
+        const auto w = (1 << (j - 1));
 
         std::deque<size_t> q;
 
