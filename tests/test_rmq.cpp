@@ -253,7 +253,7 @@ TYPED_TEST(SegmentTreeTest, Queries) {
     TypeParam rmq_ds(SegmentTreeTest<TypeParam>::data);
     for(const auto &q : SegmentTreeTest<TypeParam>::queries) {
         const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(SegmentTreeTest<TypeParam>::data, q.first, q.second);
-        const auto computed_min_pos = rmq_ds.query(q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(SegmentTreeTest<TypeParam>::data, q.first, q.second);
         ASSERT_EQ(expected_min, SegmentTreeTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
     }
