@@ -69,31 +69,35 @@ public:
         ranges.reserve(n / Epsilon);
         intercepts.reserve(n / Epsilon);
 
-        const auto lg_eps = sdsl::bits::hi(2 * (Epsilon + 1)); 
-        const auto lg_n = sdsl::bits::hi(n);
+        const size_t lg_eps = sdsl::bits::hi(2 * (Epsilon + 1)); 
+        const size_t lg_n = sdsl::bits::hi(n);
 
         int64_t d = 0, curr = 1, prev = 0;
 
         fill_column(data, st[prev], lg_eps);
 
         // number of ranges originating from diagonals [0, lg_eps - 1]
-        int64_t r = lg_eps * (n + 1) - (1 << lg_eps) + 1; 
+        int64_t r = lg_eps * (n + 1) - (1UL << lg_eps) + 1; 
 
         // last element of the column lg_eps - 1
         // notice that lg_eps is always >= 1
-        int64_t last = st[prev][n - (1 << (lg_eps - 1)) + 1];
+        int64_t last = st[prev][n - (1UL << (lg_eps - 1)) + 1];
         
         deltas = std::vector<int64_t>(lg_n + 1, 0);
 
-        for(auto j = lg_eps; j <= lg_n; ++j) {
-            st[curr][0] = (cmp_elements(data[st[prev][0]], data[st[prev][1<<(j-1)]]))?
-                                     st[prev][0] : st[prev][1<<(j-1)];
+        for(size_t j = lg_eps; j <= lg_n; ++j) {
+            st[curr][0] = (cmp_elements(data[st[prev][0]], data[st[prev][1UL<<(j-1)]]))?
+                                     st[prev][0] : st[prev][1UL<<(j-1)];
 
             update_deltas(st[prev], st[curr][0], lg_eps, j, d);
 
-            for(auto i = 1; (i + (1 << j)) <= n; ++i) {
-                st[curr][i] = (cmp_elements(data[st[prev][i]], data[st[prev][i+(1<<(j-1))]]))? 
-                                    st[prev][i] : st[prev][i+(1<<(j-1))];
+            insert_point(r, st[curr][0] + d, pla);
+
+            ++r;
+
+            for(size_t i = 1; (i + (1UL << j)) <= n; ++i) {
+                st[curr][i] = (cmp_elements(data[st[prev][i]], data[st[prev][i+(1UL<<(j-1))]]))? 
+                                    st[prev][i] : st[prev][i+(1UL<<(j-1))];
 
                 insert_point(r, st[curr][i] + d, pla);
 
@@ -112,7 +116,7 @@ public:
         first_segment = std::vector<int64_t>(lg_n + 1, 0);
 
         // todo: can be done while building the pla
-        for(auto j = lg_eps; j <= lg_n; ++j) {
+        for(size_t j = lg_eps; j <= lg_n; ++j) {
             auto first =  segment_for_range(encode(0, (1 << j)-1), ranges.begin(), ranges.end());
             first_segment[j] = std::distance(ranges.begin(), first);
         }
@@ -284,11 +288,11 @@ private:
      */
     void fill_column(const std::vector<K> &data, std::vector<int64_t> &column,
                             const size_t j) {
-        const auto w = (1 << (j - 1));
+        const int64_t w = (1 << (j - 1));
 
-        std::deque<size_t> q;
+        std::deque<int64_t> q;
 
-        for(auto i = 0; i < n; ++i) {
+        for(int64_t i = 0; i < n; ++i) {
 
             while(!q.empty() && q.front() + w <= i) q.pop_front();
         
