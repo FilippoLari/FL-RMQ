@@ -181,6 +181,10 @@ public:
                 + bp.size() + (sizeof(size_t) + sizeof(bool)) * CHAR_BIT;
     }
 
+    inline size_t segment_count() const {
+        return excess_array_rmq.segment_count();
+    }
+    
 private:
 
     void sample_data(const std::vector<K> &data) {

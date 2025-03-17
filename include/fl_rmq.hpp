@@ -267,14 +267,13 @@ private:
     inline void update_deltas(const std::vector<int64_t> &prev_column, const int64_t first,
                          const size_t lg_eps, const size_t j, int64_t &d) {
 
-        const auto last = prev_column[n - (1 << (j - 1) + 1)];
+        const int64_t last = prev_column[n - (1UL << (j - 1) + 1)];
 
         if(j != lg_eps && last > first) [[likely]] {
             d += (last - first + 1);
-            deltas[j] = d;
-        } else [[unlikely]] {
-            deltas[j] = d;
         }
+
+        deltas[j] = d;
     }
 
     /**
@@ -348,8 +347,6 @@ private:
      * @param x the encoding of a range
      * @param y the adjusted position of a minima
      * @param pla the piecewise-linear approximation model
-     * @param tmp_intercepts a the temporary vector containing all the intercepts
-     *          of the segments computed so far
      */
     inline void insert_point(const Range x, const Pos y, pla_model &pla) {
         if(!pla.add_point(x, y)) {
