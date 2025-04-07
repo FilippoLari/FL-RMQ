@@ -15,6 +15,10 @@ cmake ..
 make -j8
 ```
 
+## Reproducing our results
+
+You can find our benchmarking suite and instructions on how to reproduce our results at the following link: [RMQ-Experiments](https://github.com/FilippoLari/RMQ-experiments)
+
 ## Credits
 
 This project was developed by Paolo Ferragina and Filippo Lari, and a corresponding scientific paper has been submitted to the **36th Annual Symposium on Combinatorial Pattern Matching**
