@@ -21,4 +21,13 @@ You can find our benchmarking suite and instructions on how to reproduce our res
 
 ## Credits
 
-This project was developed by Paolo Ferragina and Filippo Lari, and a corresponding scientific paper has been submitted to the **36th Annual Symposium on Combinatorial Pattern Matching**
+If you use this project in a scientific article, please cite the following paper:
+
+```tex
+@inproceedings{FerraginaL25,
+    author = {Paolo Ferragina and Filippo Lari},
+    title = {{FL-RMQ}: A Learned Approach to Range Minimum Queries},
+    booktitle = {Proc. 36th Annual Symposium on Combinatorial Pattern Matching},
+    year = {2025}
+}
+```
