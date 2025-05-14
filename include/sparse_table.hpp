@@ -26,20 +26,20 @@ public:
 
         const size_t n = data->size();
 
-        const auto max_p = sdsl::bits::hi(n);
-        table.resize(max_p);
+        const size_t lg_n = sdsl::bits::hi(n);
+        table.resize(lg_n);
 
-        for (auto i = 0; i < max_p; ++i) {
+        for (size_t i = 0; i < lg_n; ++i) {
             table[i] = sdsl::int_vector<>(n - (1ULL << (i + 1)) + 1, 0, i + 1);
         }
 
-        for (auto i = 0; i < n - 1; ++i) {
+        for (size_t i = 0; i < n - 1; ++i) {
             if((*data)[i+1] < (*data)[i])
                 table[0][i] = 1;
         }
 
-        for (auto i = 1; i < max_p; ++i) {
-            for (auto j = 0; j < table[i].size(); ++j) {
+        for (size_t i = 1; i < lg_n; ++i) {
+            for (size_t j = 0; j < table[i].size(); ++j) {
                 table[i][j] = ((*data)[j+table[i-1][j]] <= (*data)[j+(1ULL<<i)+table[i-1][j+(1ULL<<i)]]) 
                                 ? table[i-1][j] : (1ULL<<i)+table[i-1][j+(1ULL<<i)];           
             }
@@ -54,8 +54,8 @@ public:
             return i;
         if(i + 1 == j) [[unlikely]]
             return ((*data)[i] < (*data)[j]) ? i : j;
-        const auto k = sdsl::bits::hi(j - i + 1);
-        const auto jj = j - (1ULL << k) + 1;
+        const size_t k = sdsl::bits::hi(j - i);
+        const size_t jj = j - (1ULL << k) + 1;
         return ((*data)[i+table[k-1][i]] <= (*data)[jj+table[k-1][jj]]) ? i+table[k-1][i] : jj+table[k-1][jj];
     }
 

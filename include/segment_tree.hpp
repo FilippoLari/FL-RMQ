@@ -35,7 +35,7 @@ private:
         if (left == right) {
             indexes[node] = left;
         } else {
-            int mid = (left + right) / 2;
+            size_t mid = left + ((right - left) / 2);
             rec_build(data, 2 * node + 1, left, mid);
             rec_build(data, 2 * node + 2, mid + 1, right);
             indexes[node] = (data[indexes[2 * node + 1]] <= data[indexes[2 * node + 2]]) ? indexes[2 * node + 1] : indexes[2 * node + 2];
@@ -48,9 +48,9 @@ private:
         if (j < left || i > right) return n;
         if (i <= left && right <= j) return indexes[node];
         
-        int mid = (left + right) / 2;
-        int left_min_pos = rec_query(data, 2 * node + 1, left, mid, i, j);
-        int right_min_pos = rec_query(data, 2 * node + 2, mid + 1, right, i, j);
+        size_t mid = left + ((right - left) / 2);
+        size_t left_min_pos = rec_query(data, 2 * node + 1, left, mid, i, j);
+        size_t right_min_pos = rec_query(data, 2 * node + 2, mid + 1, right, i, j);
         
         if (left_min_pos == n) return right_min_pos;
         if (right_min_pos == n) return left_min_pos;
