@@ -6,10 +6,10 @@
 #include <random>
 #include <tuple>
 
+#include "fl_rmq_encoding.hpp"
 #include "block_decomposition.hpp"
 #include "sparse_table.hpp"
 #include "segment_tree.hpp"
-#include "fl_rmq_succ.hpp"
 #include "fl_rmq.hpp"
 
 using query_type = std::pair<size_t, size_t>;
@@ -36,17 +36,17 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
     return std::make_pair(min, idx);
 }
 
-typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16, 256>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32, 512>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256, 1024>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512, 2048>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048, 4096>> EncodingSampledTypes;
+typedef ::testing::Types<EncodingFLRMQ<int32_t, int64_t, int64_t, float, 256, 16, 256>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 512, 32, 512>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256, 1024>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512, 2048>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048, 4096>> EncodingSampledTypes;
 
-typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048>> EncodingTypes;
+typedef ::testing::Types<EncodingFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048>> EncodingTypes;
 
 typedef ::testing::Types<FLRMQ<int32_t, int64_t, int64_t, float, 16, 64>,
                             FLRMQ<int32_t, int64_t, int64_t, float, 32, 128>,

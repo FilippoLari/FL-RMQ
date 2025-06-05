@@ -18,8 +18,8 @@ std::pair<size_t, int64_t> real_min_excess(const pasta::BitVector &bitvector,
 
     for(size_t k = i; k <= j; ++k) {
         excess += (bitvector[k]) ? 1 : -1;
-        min_excess = (excess <= min_excess) ? excess : min_excess;
-        min_excess_idx = (excess <= min_excess) ? k : min_excess_idx;
+        min_excess_idx = (excess < min_excess) ? k : min_excess_idx;
+        min_excess = (excess < min_excess) ? excess : min_excess;
     }
 
     return std::make_pair(min_excess_idx, min_excess);

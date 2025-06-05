@@ -23,14 +23,14 @@
 #include "fl_rmq.hpp"
 
 template<typename K, typename Range, typename Pos,
- typename Floating = float, size_t Epsilon = 4096>
-class ExcessFLRMQ : public FLRMQ<K, Range, Pos, Floating, 0, Epsilon> {
+ typename Floating = float, size_t Epsilon = 4096, bool Rightmost = false>
+class ExcessFLRMQ : public FLRMQ<K, Range, Pos, Floating, 0, Epsilon, Rightmost> {
 
 public:
 
     ExcessFLRMQ() = default;
 
-    explicit ExcessFLRMQ(const std::vector<K> &excess_array) : FLRMQ<K, Range, Pos, Floating, 0, Epsilon>(excess_array) {}
+    explicit ExcessFLRMQ(const std::vector<K> &excess_array) : FLRMQ<K, Range, Pos, Floating, 0, Epsilon, false>(excess_array) {}
 
     std::tuple<size_t, size_t, size_t, size_t> query(const size_t i, const size_t j) const {
 
@@ -58,12 +58,12 @@ public:
 template<typename K, typename Range, typename Pos,
  typename Floating = float, size_t Epsilon = 4096,
  size_t ExcSamples = 2048, size_t DataSamples = 0>
-class SuccinctFLRMQ {
+class EncodingFLRMQ {
     static_assert(ExcSamples > 0);
     static_assert(ExcSamples <= Epsilon);
 
     pasta::BitVector bp;
-    pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES,
+    pasta::FlatRankSelect<pasta::OptimizedFor::ZERO_QUERIES,
                             pasta::FindL2FlatWith::BINARY_SEARCH> bp_rs;
 
     sdsl::int_vector<> exc_samples;
@@ -77,26 +77,19 @@ class SuccinctFLRMQ {
 
     SparseTable<sdsl::int_vector<>> top_level_st;
 
-    bool reversed;
     size_t n;
 
 public:
 
-    SuccinctFLRMQ() = default;
+    EncodingFLRMQ() = default;
 
-    explicit SuccinctFLRMQ(const std::vector<K> &data) : n(data.size()) {
+    explicit EncodingFLRMQ(const std::vector<K> &data) : n(data.size()) {
 
-        const size_t bp_size = 2 * n + 2;
+        const size_t bp_size = 2 * n;
 
         bp = pasta::BitVector(bp_size, 0);
 
-        if(build_cartesian_tree<true>(data) < build_cartesian_tree<false>(data)) {
-            build_cartesian_tree<true>(data, true);
-            reversed = true;
-        } else {
-            build_cartesian_tree<false>(data, true);
-            reversed = false;
-        }
+        build_bp_sequence(data);
 
         // compute the excess array
         // todo: build it while computing the cartesian tree
@@ -114,7 +107,7 @@ public:
 
         excess_array_rmq = ExcessFLRMQ<int64_t, Range, Pos, Floating, Epsilon>(excess_array);
 
-        bp_rs = pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES, 
+        bp_rs = pasta::FlatRankSelect<pasta::OptimizedFor::ZERO_QUERIES, 
                                         pasta::FindL2FlatWith::BINARY_SEARCH>(bp);
 
         if constexpr (DataSamples > 0) {
@@ -134,37 +127,28 @@ public:
             if(i <= min_idx && min_idx <= j) return min_idx;
         }
         
-        size_t m_i = (reversed) ? mirror(i) : i;
-        size_t m_j = (reversed) ? mirror(j) : j;
+        // sum 1 to i and j because of zero-based indexing 
 
-        if(reversed) std::swap(m_i, m_j);
-
-        const size_t bp_i = bp_rs.select1(m_i + 2) - 1;
-        const size_t bp_j = bp_rs.select1(m_j + 2);
+        const size_t bp_i = bp_rs.select0(i + 1);
+        const size_t bp_j = bp_rs.select0(j + 1);
 
         // linear scan with precomputed tables and sampled
-        // excess array if the range is small
+        // excess array if the range is smaller than 2 * (eps + 1)
 
         if(bp_j - bp_i + 1 <= 2 * Epsilon + 2) {
             const auto [pos_min, _] = min_excess(bp_i, bp_j);
-            const auto array_pos = bp_rs.rank1(pos_min + 1) - 1;
-            return (reversed) ? mirror(array_pos) : array_pos;
+            return bp_rs.rank0(pos_min);
         }
 
-        // rightmost +-1 rmq on the reduced intervals using
-        // the precomputed tables and sampled excess array 
+        // leftmost +-1 rmq on the reduced intervals using
+        // the precomputed tables and the sampled excess array 
 
         const auto [l1, h1, l2, h2] = excess_array_rmq.query(bp_i, bp_j);
 
         const auto [pos_min_exc1, min_exc1] = min_excess(l1, h1);
         const auto [pos_min_exc2, min_exc2] = min_excess(l2, h2);
 
-        // notice: the rank operation can be avoided
-        // but it requires a lot of operations, don't know
-        // if it make sense in practice.
-        auto array_pos = ((min_exc1 < min_exc2) ? bp_rs.rank1(pos_min_exc1 + 1) : bp_rs.rank1(pos_min_exc2 + 1)) - 1;
-
-        return (reversed) ? mirror(array_pos) : array_pos;
+        return (min_exc2 < min_exc1) ? bp_rs.rank0(pos_min_exc2) : bp_rs.rank0(pos_min_exc1);
     }
 
     inline size_t size() const {
@@ -238,7 +222,7 @@ private:
             int64_t pos_min_exc = 0;
 
             for(size_t j = 1; i + j < excess_size && j < ExcSamples; ++j) {
-                if(excess_array[i + j] <= min_exc) {
+                if(excess_array[i + j] < min_exc) {
                     min_exc = excess_array[i + j];
                     pos_min_exc = j;
                 }
@@ -254,14 +238,10 @@ private:
         sdsl::util::bit_compress(pos_min_exc_samples);
     }
 
-    inline size_t mirror(const size_t i) const {
-        return n - i - 1;
-    }
-
     inline std::pair<size_t, int64_t> min_excess(const size_t l, const size_t h) const {
         
         if(h - l + 1 < ExcSamples) [[unlikely]] {
-            const auto exc_l = 2 * bp_rs.rank1(l) - l;
+            const auto exc_l = l - 2 * bp_rs.rank0(l);
             return min_excess_scan(bp, exc_l, l, h);
         }
 
@@ -272,7 +252,7 @@ private:
         size_t sample_idx = start;
 
         for(size_t k = start + 1; k <= end; ++k) {
-            if(min_exc_samples[k] <= min_exc) {
+            if(min_exc_samples[k] < min_exc) {
                 min_exc = min_exc_samples[k];
                 pos_min_exc = pos_min_exc_samples[k];
                 sample_idx = k;
@@ -285,14 +265,14 @@ private:
             return std::make_pair(pos_min_exc, min_exc);
         } else [[unlikely]] {
             
-            const auto exc_l = 2 * bp_rs.rank1(l) - l;
+            const auto exc_l = l - 2 * bp_rs.rank0(l);
 
             // notice (start + 1) * ExcSamples - 1 is never >= bp.size() because of the initial check
             std::tie(pos_min_exc, min_exc) = min_excess_scan(bp, exc_l, l, (start + 1) * ExcSamples - 1);
 
             // todo: can be avoided
             for(size_t k = start + 1; k < end; ++k) {
-                if(min_exc_samples[k] <= min_exc) {
+                if(min_exc_samples[k] < min_exc) {
                     min_exc = min_exc_samples[k];
                     pos_min_exc = pos_min_exc_samples[k] + (k * ExcSamples);
                     sample_idx = k;
@@ -300,61 +280,41 @@ private:
             }
 
             const auto [last_min_pos, last_min_exc] = min_excess_scan(bp, exc_samples[end - 1], end * ExcSamples, h);
-            pos_min_exc = (last_min_exc <= min_exc) ? last_min_pos : pos_min_exc;
-            min_exc = (last_min_exc <= min_exc) ? last_min_exc : min_exc;
+            pos_min_exc = (last_min_exc < min_exc) ? last_min_pos : pos_min_exc;
+            min_exc = (last_min_exc < min_exc) ? last_min_exc : min_exc;
 
             return std::make_pair(pos_min_exc, min_exc);
         }
     }
 
-    template<bool reverse>
-    inline bool compare(const K a, const K b) const {
-        if constexpr (reverse)
-            return a <= b;
-        else 
-            return a < b;
-    }
-
-    template<bool reverse>
-    int64_t build_cartesian_tree(const std::vector<K> &data, bool write = false) {
-        int64_t max_excess = 0, curr_excess = 0;
-
+    /**
+     * Build the balanced parenthesis sequence of the Cartesian tree
+     * of data as described in Munro et al. ESA 21.
+     * 
+     * Credits to: https://github.com/zkou-ut/hyperrmq/blob/main/src/cartesian_tree.cpp 
+     * 
+     * @param data the input array
+     */
+    void build_bp_sequence(const std::vector<K> &data) {
         if(data.size() > 0) [[likely]] {
-            int64_t curr = (reverse) ? data.size() - 1 : 0;
-            size_t bp_curr = 0;
-            std::stack<K> s;
-            
-            s.push(std::numeric_limits<K>::min());
 
-            if(write) {
-                bp[bp_curr] = 1;
-                bp_curr++;
+            std::stack<K> s;
+            size_t pos = 2 * data.size();
+
+            for (int64_t i = n - 1; i >= 0; i--) {
+                while (!s.empty() && data[s.top()] >= data[i]) {
+                    s.pop();
+                    bp[--pos] = 1;
+                }
+                s.push(i);
+                bp[--pos] = 0;
             }
 
-            while((!reverse && curr < data.size()) || (reverse && curr >= 0)) {
-
-                while(compare<reverse>(data[curr], s.top()) && s.size() > 1) {
-                    s.pop();
-                    bp_curr++;
-                    curr_excess--;
-                }
-
-                curr_excess++;
-
-                if(write) {
-                    bp[bp_curr] = 1;
-                    bp_curr++;
-                }
-
-                if(curr_excess > max_excess) max_excess = curr_excess;
-
-                s.push(data[curr]);
-
-                curr += (reverse) ? -1 : 1;
+            while (!s.empty()) {
+                s.pop();
+                bp[--pos] = 1;
             }
         }
-
-        return max_excess;
     }
 
 };
