@@ -6,7 +6,10 @@
 #include <random>
 #include <tuple>
 
-#include "fl_rmq_succ.hpp"
+#include "fl_rmq_encoding.hpp"
+#include "block_decomposition.hpp"
+#include "sparse_table.hpp"
+#include "segment_tree.hpp"
 #include "fl_rmq.hpp"
 
 using query_type = std::pair<size_t, size_t>;
@@ -33,20 +36,41 @@ inline std::pair<K, size_t> find_minimum(const std::vector<K> &data, const size_
     return std::make_pair(min, idx);
 }
 
-typedef ::testing::Types<SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512>,
-                            SuccinctFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048>> NonSystTypes;
+typedef ::testing::Types<EncodingFLRMQ<int32_t, int64_t, int64_t, float, 256, 16, 256>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 512, 32, 512>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256, 1024>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512, 2048>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048, 4096>> EncodingSampledTypes;
 
-typedef ::testing::Types<FLRMQ<int32_t, int64_t, int64_t, float, 64>,
-                            FLRMQ<int32_t, int64_t, int64_t, float, 128>,
-                            FLRMQ<int32_t, int64_t, int64_t, float, 256>,
-                            FLRMQ<int32_t, int64_t, int64_t, float, 512>,
-                            FLRMQ<int32_t, int64_t, int64_t, float, 1024>> SystTypes;
+typedef ::testing::Types<EncodingFLRMQ<int32_t, int64_t, int64_t, float, 256, 16>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 512, 32>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 1024, 256>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 2048, 512>,
+                            EncodingFLRMQ<int32_t, int64_t, int64_t, float, 4096, 2048>> EncodingTypes;
+
+typedef ::testing::Types<FLRMQ<int32_t, int64_t, int64_t, float, 16, 64>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 32, 128>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 64, 256>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 128, 512>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 256, 1024>> IndexingSampledTypes;
+
+typedef ::testing::Types<FLRMQ<int32_t, int64_t, int64_t, float, 0, 64>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 0, 128>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 0, 256>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 0, 512>,
+                            FLRMQ<int32_t, int64_t, int64_t, float, 0, 1024>> IndexingTypes;
+
+typedef ::testing::Types<BlockDecomposition<int32_t, int32_t, 10>,
+                            BlockDecomposition<int32_t, int32_t, 100>,
+                            BlockDecomposition<int32_t, int32_t, 1000>,
+                            BlockDecomposition<int32_t, int32_t, 10000>> BlockDecompositionTypes;
+
+typedef ::testing::Types<SparseTable<std::vector<int32_t>>> SparseTableType;
+
+typedef ::testing::Types<SegmentTree<int32_t, int32_t>> SegmentTreeType;
 
 template <typename T>
-class FLRMQTest : public ::testing::Test {
+class RMQTest : public ::testing::Test {
 protected:
 
     static std::vector<int32_t> data;
@@ -57,7 +81,7 @@ protected:
 
     static void init_data(size_t size) {
         std::mt19937 gen(seed);
-        std::uniform_int_distribution<int32_t> dis(1, 1e9);
+        std::uniform_int_distribution<int32_t> dis(1, size);
 
         for(size_t i = 0; i < size; ++i)
             data.push_back(dis(gen));
@@ -90,51 +114,150 @@ protected:
 };
 
 template<typename T>
-std::vector<int32_t> FLRMQTest<T>::data;
+std::vector<int32_t> RMQTest<T>::data;
 
 template<typename T>
-std::vector<query_type> FLRMQTest<T>::queries;
+std::vector<query_type> RMQTest<T>::queries;
 
 template <typename T>
-class NonSystFLRMQTest : public FLRMQTest<T> {
+class EncodingSampledFLRMQTest : public RMQTest<T> {
 protected:
     static void SetUpTestSuite() {
-        FLRMQTest<T>::SetUpTestSuite();
+        RMQTest<T>::SetUpTestSuite();
     }
 };
 
 template <typename T>
-class SystFLRMQTest : public FLRMQTest<T> {
+class EncodingFLRMQTest : public RMQTest<T> {
 protected:
     static void SetUpTestSuite() {
-        FLRMQTest<T>::SetUpTestSuite();
+        RMQTest<T>::SetUpTestSuite();
     }
 };
 
-TYPED_TEST_SUITE(NonSystFLRMQTest, NonSystTypes);
+template <typename T>
+class IndexingSampledFLRMQTest : public RMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        RMQTest<T>::SetUpTestSuite();
+    }
+};
 
-TYPED_TEST(NonSystFLRMQTest, NonSystQueries) {
-    TypeParam rmq_ds(NonSystFLRMQTest<TypeParam>::data);
-    for(const auto &q : NonSystFLRMQTest<TypeParam>::queries) {
-        const auto [expected_min, expected_min_pos] = find_minimum(NonSystFLRMQTest<TypeParam>::data, q.first, q.second);
+template <typename T>
+class IndexingFLRMQTest : public RMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        RMQTest<T>::SetUpTestSuite();
+    }
+};
+
+template <typename T>
+class BlockDecompositionTest : public RMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        RMQTest<T>::SetUpTestSuite();
+    }
+};
+
+template <typename T>
+class SparseTableTest : public RMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        RMQTest<T>::SetUpTestSuite();
+    }
+};
+
+template <typename T>
+class SegmentTreeTest : public RMQTest<T> {
+protected:
+    static void SetUpTestSuite() {
+        RMQTest<T>::SetUpTestSuite();
+    }
+};
+
+TYPED_TEST_SUITE(EncodingSampledFLRMQTest, EncodingSampledTypes);
+
+TYPED_TEST(EncodingSampledFLRMQTest, EncodingSampledQueries) {
+    TypeParam rmq_ds(EncodingFLRMQTest<TypeParam>::data);
+    for(const auto &q : EncodingFLRMQTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum(EncodingFLRMQTest<TypeParam>::data, q.first, q.second);
         const auto computed_min_pos = rmq_ds.query(q.first, q.second);
+        ASSERT_EQ(expected_min, EncodingFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
-        ASSERT_EQ(expected_min, NonSystFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
     }
 }
 
-/*
-TYPED_TEST_SUITE(SystFLRMQTest, SystTypes);
+TYPED_TEST_SUITE(EncodingFLRMQTest, EncodingTypes);
 
-TYPED_TEST(SystFLRMQTest, SystQueries) {
-    TypeParam rmq_ds(SystFLRMQTest<TypeParam>::data);
-    for(const auto &q : SystFLRMQTest<TypeParam>::queries) {
-        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, false>(SystFLRMQTest<TypeParam>::data, q.first, q.second);
-        const auto computed_min_pos = rmq_ds.query(SystFLRMQTest<TypeParam>::data, q.first, q.second);
+TYPED_TEST(EncodingFLRMQTest, EncodingQueries) {
+    TypeParam rmq_ds(EncodingFLRMQTest<TypeParam>::data);
+    for(const auto &q : EncodingFLRMQTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum(EncodingFLRMQTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(q.first, q.second);
+        ASSERT_EQ(expected_min, EncodingFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
         ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
-        ASSERT_EQ(expected_min, SystFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
     }
-}*/
+}
+
+TYPED_TEST_SUITE(IndexingSampledFLRMQTest, IndexingSampledTypes);
+
+TYPED_TEST(IndexingSampledFLRMQTest, Queries) {
+    TypeParam rmq_ds(IndexingSampledFLRMQTest<TypeParam>::data);
+    for(const auto &q : IndexingSampledFLRMQTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, false>(IndexingSampledFLRMQTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(IndexingSampledFLRMQTest<TypeParam>::data, q.first, q.second);
+        ASSERT_EQ(expected_min, IndexingSampledFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
+
+TYPED_TEST_SUITE(IndexingFLRMQTest, IndexingTypes);
+
+TYPED_TEST(IndexingFLRMQTest, Queries) {
+    TypeParam rmq_ds(IndexingFLRMQTest<TypeParam>::data);
+    for(const auto &q : IndexingFLRMQTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, false>(IndexingFLRMQTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(IndexingFLRMQTest<TypeParam>::data, q.first, q.second);
+        ASSERT_EQ(expected_min, IndexingFLRMQTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
+
+TYPED_TEST_SUITE(BlockDecompositionTest, BlockDecompositionTypes);
+
+TYPED_TEST(BlockDecompositionTest, Queries) {
+    TypeParam rmq_ds(BlockDecompositionTest<TypeParam>::data);
+    for(const auto &q : BlockDecompositionTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(BlockDecompositionTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(BlockDecompositionTest<TypeParam>::data, q.first, q.second);
+        ASSERT_EQ(expected_min, BlockDecompositionTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
+
+TYPED_TEST_SUITE(SparseTableTest, SparseTableType);
+
+TYPED_TEST(SparseTableTest, Queries) {
+    TypeParam rmq_ds(&SparseTableTest<TypeParam>::data);
+    for(const auto &q : SparseTableTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(SparseTableTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(q.first, q.second);
+        ASSERT_EQ(expected_min, SparseTableTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
+
+TYPED_TEST_SUITE(SegmentTreeTest, SegmentTreeType);
+
+TYPED_TEST(SegmentTreeTest, Queries) {
+    TypeParam rmq_ds(SegmentTreeTest<TypeParam>::data);
+    for(const auto &q : SegmentTreeTest<TypeParam>::queries) {
+        const auto [expected_min, expected_min_pos] = find_minimum<int32_t, true>(SegmentTreeTest<TypeParam>::data, q.first, q.second);
+        const auto computed_min_pos = rmq_ds.query(SegmentTreeTest<TypeParam>::data, q.first, q.second);
+        ASSERT_EQ(expected_min, SegmentTreeTest<TypeParam>::data[computed_min_pos]) << " Query i = " << q.first << ", j = " << q.second;
+        ASSERT_EQ(expected_min_pos, computed_min_pos) << " Query i = " << q.first << ", j = " << q.second;
+    }
+}
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
